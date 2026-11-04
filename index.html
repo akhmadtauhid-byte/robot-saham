@@ -97,6 +97,12 @@ tr.sel{background:var(--bg)}
       <span class="note" id="srcStat"></span>
     </div>
     <div class="note" style="margin-top:6px">Kata sandi dibuat di Google Sheets lewat menu Robot Saham &gt; 4. Buat / lihat kata sandi API. Disimpan hanya di browser ini. Data diperbarui otomatis tiap hari bursa tutup bila jadwal otomatis di Sheets sudah dipasang.</div>
+    <div class="row" style="margin-top:12px">
+      <label>Tambah saham baru (kode) <input type="text" id="newKode" maxlength="6" placeholder="contoh: ANTM" autocomplete="off" style="width:140px;text-transform:uppercase"></label>
+      <button class="primary" id="btnTambah">Tambah &amp; analisa</button>
+      <button id="btnAnalisa" title="Menarik ulang data semua saham di watchlist (beberapa menit)">Analisa ulang semua</button>
+    </div>
+    <div class="note" id="kelolaStat" style="margin-top:6px"></div>
     <div class="err" id="srcErr" role="alert"></div>
   </div>
 
@@ -507,42 +513,94 @@ function fmtUpd(u){
   try { return d.toLocaleString('sv-SE', {timeZone: 'Asia/Jakarta'}).slice(0, 16); } catch (e) { return String(u); }
 }
 
+function tokenAktif(){ return $('#tok').value.trim(); }
+function apiSiap(){
+  const er = $('#srcErr'); er.textContent = '';
+  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App Anda (lihat panduan).'; return false; }
+  if (!tokenAktif()) { er.textContent = 'Masukkan kata sandi API dulu.'; return false; }
+  return true;
+}
+async function apiGet(params){
+  const q = new URLSearchParams(Object.assign({token: tokenAktif()}, params));
+  let res;
+  try { res = await fetch(API_URL + '?' + q.toString()); }
+  catch (e) { throw new Error('Tidak bisa menghubungi Web App. Periksa URL, koneksi internet, dan pengaturan deployment (akses: Anyone).'); }
+  let j;
+  try { j = await res.json(); }
+  catch (e) { throw new Error('Respons bukan data. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.'); }
+  if (!j.ok) throw new Error(j.error || 'Permintaan gagal.');
+  return j;
+}
+function masukkanSaham(x){
+  addStock(x.kode, {date: x.d.map(t => new Date(t + 'T00:00:00Z')), o: x.o, h: x.h, l: x.l, c: x.c, v: x.v});
+  if (S.stocks[x.kode]) S.stocks[x.kode].src = 'api';
+}
+function pilihTerbaik(){
+  const ranked = Object.values(S.stocks).map(s => ({n: s.name, sc: lastScore(s)})).filter(x => x.sc).sort((a, b) => b.sc.total - a.sc.total);
+  if (ranked.length) S.sel = ranked[0].n;
+}
+function terapkanData(j){
+  S.stocks = {};
+  j.stocks.forEach(x => { try { masukkanSaham(x); } catch (e) {} });
+  if (j.cfg) {
+    const set = (id, v) => { if (v != null && !isNaN(v)) $(id).value = v; };
+    set('#cCap', j.cfg.cap); set('#cRisk', j.cfg.riskPct); set('#cAtr', j.cfg.atrMult);
+    set('#cIn', j.cfg.entryTh); set('#cOut', j.cfg.exitTh); set('#cFb', j.cfg.feeB); set('#cFs', j.cfg.feeS);
+  }
+  readCfg(); pilihTerbaik(); renderAll();
+  $('#srcStat').textContent = Object.keys(S.stocks).length + ' saham, diperbarui ' + fmtUpd(j.updated) + ' WIB';
+}
+function kunciTombol(on){ ['#btnLoad', '#btnTambah', '#btnAnalisa'].forEach(id => { $(id).disabled = on; }); }
 async function muatDariApi(){
-  const st = $('#srcStat'), er = $('#srcErr'); er.textContent = '';
-  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App Anda (lihat panduan).'; return; }
-  const tok = $('#tok').value.trim();
-  if (!tok) { er.textContent = 'Masukkan kata sandi API dulu.'; return; }
-  st.textContent = 'Memuat...'; $('#btnLoad').disabled = true;
+  if (!apiSiap()) return;
+  const st = $('#srcStat'), er = $('#srcErr');
+  st.textContent = 'Memuat...'; kunciTombol(true);
   try {
-    let res;
-    try { res = await fetch(API_URL + '?token=' + encodeURIComponent(tok)); }
-    catch (e) { throw new Error('Tidak bisa menghubungi Web App. Periksa URL, koneksi internet, dan pengaturan deployment (akses: Anyone).'); }
-    let j;
-    try { j = await res.json(); }
-    catch (e) { throw new Error('Respons bukan data. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.'); }
-    if (!j.ok) throw new Error(j.error || 'Gagal memuat data.');
-    if (!j.stocks || !j.stocks.length) throw new Error('Data kosong. Jalankan menu Robot Saham > 2. Analisa sekarang di Google Sheets.');
-    S.stocks = {};
-    j.stocks.forEach(x => {
-      try {
-        addStock(x.kode, {date: x.d.map(t => new Date(t + 'T00:00:00Z')), o: x.o, h: x.h, l: x.l, c: x.c, v: x.v});
-      } catch (e) {}
-    });
-    if (j.cfg) {
-      const set = (id, v) => { if (v != null && !isNaN(v)) $(id).value = v; };
-      set('#cCap', j.cfg.cap); set('#cRisk', j.cfg.riskPct); set('#cAtr', j.cfg.atrMult);
-      set('#cIn', j.cfg.entryTh); set('#cOut', j.cfg.exitTh); set('#cFb', j.cfg.feeB); set('#cFs', j.cfg.feeS);
-    }
-    try { localStorage.setItem('rs_tok', tok); } catch (e) {}
-    readCfg();
-    const ranked = Object.values(S.stocks).map(s => ({n: s.name, sc: lastScore(s)})).filter(x => x.sc).sort((a, b) => b.sc.total - a.sc.total);
-    if (ranked.length) S.sel = ranked[0].n;
-    renderAll();
-    st.textContent = Object.keys(S.stocks).length + ' saham, diperbarui ' + fmtUpd(j.updated) + ' WIB';
+    const j = await apiGet({});
+    if (!j.stocks || !j.stocks.length) throw new Error('Data kosong. Tambah saham dengan kolom di atas.');
+    try { localStorage.setItem('rs_tok', tokenAktif()); } catch (e) {}
+    terapkanData(j);
   } catch (e) { st.textContent = ''; er.textContent = e.message; }
-  $('#btnLoad').disabled = false;
+  kunciTombol(false);
+}
+async function tambahSaham(){
+  const kode = ($('#newKode').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!apiSiap()) return;
+  const ks = $('#kelolaStat'), er = $('#srcErr');
+  if (!kode) { er.textContent = 'Tulis kode saham dulu, contoh: ANTM.'; return; }
+  ks.textContent = 'Mengambil data ' + kode + ' dan menganalisa (sekitar 10–30 detik)...'; kunciTombol(true);
+  try {
+    const j = await apiGet({action: 'tambah', kode});
+    masukkanSaham(j.stock);
+    try { localStorage.setItem('rs_tok', tokenAktif()); } catch (e) {}
+    S.sel = j.stock.kode; readCfg(); renderAll();
+    $('#newKode').value = '';
+    ks.textContent = kode + (j.baru ? ' ditambahkan ke watchlist.' : ' diperbarui.') + ' Tabel Rekap di Google Sheets ikut diperbarui pada analisa penuh berikutnya (jadwal 17.00).';
+  } catch (e) { ks.textContent = ''; er.textContent = e.message; }
+  kunciTombol(false);
+}
+async function analisaUlangSemua(){
+  if (!apiSiap()) return;
+  const ks = $('#kelolaStat'), er = $('#srcErr');
+  ks.textContent = 'Menganalisa ulang semua saham di Google Sheets. Ini bisa makan beberapa menit, jangan tutup halaman...'; kunciTombol(true);
+  try {
+    const j = await apiGet({action: 'analisa'});
+    if (!j.stocks || !j.stocks.length) throw new Error('Data kosong setelah analisa.');
+    terapkanData(j); ks.textContent = 'Analisa ulang selesai.';
+  } catch (e) { ks.textContent = ''; er.textContent = e.message; }
+  kunciTombol(false);
+}
+async function hapusDiServer(kode){
+  if (!apiSiap()) return false;
+  const ks = $('#kelolaStat'), er = $('#srcErr');
+  ks.textContent = 'Menghapus ' + kode + '...'; kunciTombol(true);
+  try { await apiGet({action: 'hapus', kode}); ks.textContent = kode + ' dihapus dari watchlist.'; kunciTombol(false); return true; }
+  catch (e) { ks.textContent = ''; er.textContent = e.message; kunciTombol(false); return false; }
 }
 $('#btnLoad').onclick = muatDariApi;
+$('#btnTambah').onclick = tambahSaham;
+$('#btnAnalisa').onclick = analisaUlangSemua;
+$('#newKode').addEventListener('keydown', e => { if (e.key === 'Enter') tambahSaham(); });
 $('#tok').addEventListener('keydown', e => { if (e.key === 'Enter') muatDariApi(); });
 
 ['#cCap','#cRisk','#cAtr','#cIn','#cOut','#cFb','#cFs'].forEach(id => $(id).addEventListener('input', () => { readCfg(); renderAll(); }));
@@ -578,16 +636,25 @@ function renderWatch(){
       <td class="num">${st.I.rsi[n] != null ? st.I.rsi[n].toFixed(0) : '–'}</td>
       <td class="num ${bt.total >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.total)}</td>
       <td class="num ${bt.bh >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.bh)}</td>
-      <td><button class="seg" data-x="${esc(st.name)}" aria-label="Hapus ${esc(st.name)}">×</button></td></tr>`;
+      <td><button class="seg" data-x="${esc(st.name)}" aria-label="Hapus ${esc(st.name)} dari watchlist">×</button></td></tr>`;
   }
   $('#wl').innerHTML = h + '</tbody>';
   $('#wl').querySelectorAll('tr.pick').forEach(tr => {
     const go = () => { S.sel = tr.dataset.n; renderAll(); };
     tr.onclick = go; tr.onkeydown = e => { if (e.key === 'Enter') go(); };
   });
-  $('#wl').querySelectorAll('button[data-x]').forEach(b => b.onclick = e => {
-    e.stopPropagation(); delete S.stocks[b.dataset.x];
-    if (S.sel === b.dataset.x) S.sel = Object.keys(S.stocks)[0] || null;
+  $('#wl').querySelectorAll('button[data-x]').forEach(b => b.onclick = async e => {
+    e.stopPropagation();
+    const k = b.dataset.x;
+    if (!b.dataset.arm) {
+      b.dataset.arm = '1'; b.textContent = 'Hapus?'; b.style.color = 'var(--bad)';
+      setTimeout(() => { if (b.isConnected) { delete b.dataset.arm; b.textContent = '×'; b.style.color = ''; } }, 4000);
+      return;
+    }
+    const st = S.stocks[k];
+    if (st && st.src === 'api') { const ok = await hapusDiServer(k); if (!ok) return; }
+    delete S.stocks[k];
+    if (S.sel === k) S.sel = Object.keys(S.stocks)[0] || null;
     renderAll();
   });
 }
