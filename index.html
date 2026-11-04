@@ -1,28 +1,29 @@
 <!DOCTYPE html>
-<html lang="id">
+<html data-theme="dark" lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Robot Analisa Saham IDX - Rekomendasi Beli / Jual</title>
 <style>
 :root{
-  color-scheme: light dark;
+  color-scheme: light;
   --bg:#f6f6f4; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#85847f;
   --line:#e3e2dd; --grid:#ecebe7; --s1:#2a78d6; --s2:#eb6834; --s3:#6250d6; --s4:#1baf7a;
   --good:#0b7a3e; --warn:#a86400; --bad:#cc3b3a;
   --good-bg:#e6f3ec; --warn-bg:#fbf0dc; --bad-bg:#fae8e7;
 }
-@media (prefers-color-scheme: dark){
-  :root:where(:not([data-theme="light"])){
-    --bg:#121211; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e86;
-    --line:#2e2e2b; --grid:#262624; --s1:#3987e5; --s2:#d95926; --s3:#9085e9; --s4:#199e70;
-    --good:#4cc27f; --warn:#e0a030; --bad:#ef6b6a;
-    --good-bg:#16291f; --warn-bg:#2d2412; --bad-bg:#2f1a1a;
-  }
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#000000; --surface:#0d0d0e; --ink:#f2f2f0; --ink2:#c4c3bc; --muted:#8a8981;
+  --line:#26262a; --grid:#1a1a1d; --s1:#4a9bff; --s2:#ff8a4c; --s3:#a99cff; --s4:#2fd39a;
+  --good:#26d07c; --warn:#f0b43c; --bad:#ff5a5a;
+  --good-bg:#0a1f15; --warn-bg:#2a2008; --bad-bg:#2a0e0e;
 }
+:root[data-theme="dark"] button.primary{color:#04101f;font-weight:600}
+.themebtn{position:absolute;right:14px;top:14px;padding:5px 10px;font-size:13px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:16px 14px 48px}
+.wrap{position:relative;max-width:1100px;margin:0 auto;padding:16px 14px 48px}
 h1{font-size:22px;margin:4px 0 2px}
 h2{font-size:18px;margin:0}
 h3{font-size:15px;margin:0 0 8px}
@@ -67,6 +68,15 @@ tr.sel{background:var(--bg)}
 .bar{position:relative;height:8px;background:var(--bg);border-radius:4px;min-width:90px}
 .bar .mid{position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:var(--muted)}
 .bar .fill{position:absolute;top:0;bottom:0;border-radius:2px}
+.live .price{font-size:26px}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);color:var(--ink2)}
+.pill.on{border-color:var(--good);color:var(--ink);background:var(--good-bg)}
+.alertbox{border:1px solid var(--line);border-left-width:5px;border-radius:6px;padding:8px 10px;margin:8px 0;font-size:14px}
+.alertbox.good{border-color:var(--good);background:var(--good-bg)}
+.alertbox.bad{border-color:var(--bad);background:var(--bad-bg)}
+.alertbox.warn{border-color:var(--warn);background:var(--warn-bg)}
+.chk{flex-direction:row;align-items:center;gap:6px}
+#tvbox{height:520px;margin-top:8px}
 .why{white-space:normal;min-width:200px;color:var(--ink2)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
 .tile{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
@@ -86,6 +96,7 @@ tr.sel{background:var(--bg)}
 </head>
 <body>
 <div class="wrap">
+  <button class="themebtn" id="btnTema" aria-label="Ganti tema terang/gelap"></button>
   <h1>Robot Analisa Saham IDX</h1>
   <p class="sub">Data harga dari Google Sheets Anda, dianalisa otomatis: grafik, skor −100 s/d +100, rekomendasi beli/jual, rencana trade (stop loss, target, jumlah lot), dan backtest.</p>
 
@@ -151,6 +162,12 @@ tr.sel{background:var(--bg)}
     <h3>Rekomendasi hari ini (urut skor tertinggi)</h3>
     <div id="ringkas" style="margin-bottom:8px"></div>
     <div class="tblwrap"><table id="wl"></table></div>
+  </div>
+
+  <div class="card" id="pgCard" hidden>
+    <h3>Pemindai potensi naik (volume &amp; momentum harga)</h3>
+    <p class="note" style="margin-top:0">Memeriksa semua saham di watchlist: apakah volume melonjak saat harga naik, harga menembus / mendekati level tertinggi 20 hari, dan tren mendukung. Klik baris untuk melihat grafiknya. Ini penyaring awal, bukan jaminan harga naik.</p>
+    <div id="pgOut"></div>
   </div>
 
   <section id="detail" hidden></section>
@@ -454,7 +471,8 @@ function synth(seed, p0, drift, vol, n = 320){
 }
 
 /* ===================== state ===================== */
-const S = {stocks: {}, sel: null, range: 120, cfg: {}};
+const S = {stocks: {}, sel: null, range: 120, cfg: {}, ct: 'candle', bb: false, s200: false};
+let LAST_BT = null;
 function readCfg(){
   const g = id => parseFloat($(id).value);
   S.cfg = {cap: g('#cCap') || 0, riskPct: g('#cRisk') || 1, atrMult: g('#cAtr') || 2, entryTh: g('#cIn'), exitTh: g('#cOut'),
@@ -612,7 +630,7 @@ function renderAll(){
   $('#detail').hidden = !names.length;
   $('#count').textContent = names.length ? names.length + ' saham di watchlist' : '';
   if (!names.length) return;
-  renderWatch(); renderDetail();
+  renderWatch(); renderPeluang(); renderDetail();
 }
 function meterHTML(v){
   const w = Math.abs(v) / 2, col = v >= 0 ? 'var(--good)' : 'var(--bad)';
@@ -729,6 +747,8 @@ function renderDetail(){
       ${warns.length ? '<ul class="warnlist">' + warns.map(w => '<li>⚠ ' + esc(w) + '</li>').join('') + '</ul>' : ''}
     </div>
 
+    <div class="card live" id="livecard"></div>
+
     <div class="grid2">
       <div class="card"><h3>Mengapa skornya begitu?</h3>
         <div class="tblwrap"><table><thead><tr><th>Komponen</th><th class="num">Bobot</th><th>Arah</th><th class="num">Poin</th><th>Penjelasan</th></tr></thead><tbody>${compRows}</tbody></table></div>
@@ -738,23 +758,33 @@ function renderDetail(){
 
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <h3 style="margin:0">Grafik &amp; sinyal backtest</h3>
-        <div class="row" id="rng" style="gap:6px">${[60,120,250,0].map(r => `<button class="seg" data-r="${r}" aria-pressed="${S.range === r}">${r || 'Semua'}</button>`).join('')}</div>
+        <h3 style="margin:0">Grafik &amp; sinyal</h3>
+        <div class="row" style="gap:6px">
+          <span class="row" id="ctp" style="gap:6px"><button class="seg" data-t="candle" aria-pressed="${S.ct === 'candle'}">Candle</button><button class="seg" data-t="line" aria-pressed="${S.ct === 'line'}">Garis</button></span>
+          <span class="row" id="ovl" style="gap:6px"><button class="seg" data-o="s200" aria-pressed="${S.s200}">SMA200</button><button class="seg" data-o="bb" aria-pressed="${S.bb}">Bollinger</button></span>
+          <span class="row" id="rng" style="gap:6px">${[60,120,250,0].map(r => `<button class="seg" data-r="${r}" aria-pressed="${S.range === r}">${r || 'Semua'}</button>`).join('')}</span>
+        </div>
       </div>
       <div class="legend">
-        <span><i style="background:var(--s1)"></i>Harga penutupan</span>
         <span><i style="background:var(--s2)"></i>SMA20</span>
         <span><i style="background:var(--s3)"></i>SMA50</span>
-        <span><i style="background:var(--s4)"></i>SMA200</span>
-        <span><i style="background:var(--muted);opacity:.5"></i>Bollinger (20,2)</span>
+        ${S.s200 ? '<span><i style="background:var(--s4)"></i>SMA200</span>' : ''}
+        ${S.bb ? '<span><i style="background:var(--muted);opacity:.5"></i>Bollinger (20,2)</span>' : ''}
+        ${S.ct === 'candle' ? '<span><i style="background:var(--good)"></i>naik</span><span><i style="background:var(--bad)"></i>turun</span>' : '<span><i style="background:var(--s1)"></i>Harga penutupan</span>'}
         <span><b style="color:var(--good)">▲</b> beli (backtest)</span>
         <span><b style="color:var(--bad)">▼</b> keluar (backtest)</span>
+        <span id="lglive"></span>
       </div>
       <div class="chartwrap" id="cw">
         <canvas id="cvP"></canvas><canvas id="cvR"></canvas><canvas id="cvM"></canvas><canvas id="cvS"></canvas>
         <div class="vline" id="vl"></div><div class="tip" id="tip"></div>
       </div>
     </div>
+
+    <details class="card" id="tvcard"><summary>Grafik TradingView (tampilan seperti di Ajaib)</summary>
+      <p class="note">Grafik interaktif dari TradingView untuk <b>IDX:${esc(st.name)}</b>. Data gratis TradingView untuk bursa Indonesia umumnya tertunda. Bila garis SMA20/SMA50 belum sesuai, atur lewat tombol <b>Indikator</b> di dalam grafik. Perlu internet ke tradingview.com.</p>
+      <div id="tvbox"></div>
+    </details>
 
     <div class="card">
       <h3>Backtest aturan robot pada data ini</h3>
@@ -770,7 +800,287 @@ function renderDetail(){
     </details>`;
 
   $('#rng').querySelectorAll('button').forEach(b => b.onclick = () => { S.range = +b.dataset.r; renderDetail(); });
-  drawCharts(st, bt);
+  $('#ctp').querySelectorAll('button').forEach(b => b.onclick = () => { S.ct = b.dataset.t; renderDetail(); });
+  $('#ovl').querySelectorAll('button').forEach(b => b.onclick = () => { S[b.dataset.o] = !S[b.dataset.o]; renderDetail(); });
+  LAST_BT = bt;
+  bangunLive(st);
+  drawCharts(liveView(st) || st, bt);
+  $('#tvcard').addEventListener('toggle', e => { if (e.target.open) muatTV(st.name); });
+  if (TVOPEN === st.name) { $('#tvcard').open = true; }
+  segarkanLive(false);
+}
+
+/* ===================== pemindai potensi naik ===================== */
+function peluang(st){
+  const d = st.d, I = st.I, n = d.c.length - 1;
+  if (n < 30 || I.rsi[n] == null) return null;
+  let sv = 0; for (let i = n - 20; i < n; i++) sv += d.v[i];
+  const avgV = sv / 20, volX = avgV > 0 ? d.v[n] / avgV : 0;
+  let hi20 = 0; for (let i = n - 20; i < n; i++) hi20 = Math.max(hi20, d.h[i]);
+  const chg1 = d.c[n] / d.c[n - 1] - 1, chg5 = n >= 5 ? d.c[n] / d.c[n - 5] - 1 : 0;
+  const dist = d.c[n] / hi20 - 1;
+  const rng = d.h[n] - d.l[n], pos = rng > 0 ? (d.c[n] - d.l[n]) / rng : 0.5;
+  const up = d.c[n] > d.c[n - 1], rs = I.rsi[n];
+  const a20 = I.sma20[n] != null && d.c[n] > I.sma20[n], a50 = I.sma50[n] != null && d.c[n] > I.sma50[n];
+  const t2050 = I.sma20[n] != null && I.sma50[n] != null && I.sma20[n] > I.sma50[n];
+  const h = I.hist, macdUp = h[n] != null && h[n - 1] != null && h[n] > h[n - 1];
+  const macdPos = h[n] != null && h[n] > 0;
+  let avgVal = 0; for (let i = n - 20; i < n; i++) avgVal += d.v[i] * d.c[i]; avgVal /= 20;
+  let pt = 0; const why = [], warn = [];
+  // volume (maks 25), dihitung penuh hanya bila harga naik (volume besar saat turun = tekanan jual)
+  if (up) { const vp = volX >= 2 ? 25 : volX >= 1.5 ? 18 : volX >= 1.2 ? 10 : 0; pt += vp; if (vp) why.push('volume ' + volX.toFixed(1).replace('.', ',') + '× rata-rata & harga naik'); }
+  else if (volX >= 1.5) warn.push('volume besar tetapi harga turun (tekanan jual)');
+  // harga / breakout (maks 25)
+  if (dist >= 0) { pt += 25; why.push('menembus tertinggi 20 hari'); }
+  else if (dist > -0.02) { pt += 15; why.push('dekat tertinggi 20 hari (' + (dist * 100).toFixed(1).replace('.', ',') + '%)'); }
+  if (up && pos >= 0.7 && chg1 > 0.005) { pt += 5; why.push('ditutup di dekat harga tertinggi hari itu'); }
+  // tren (maks 25)
+  if (a20) pt += 8; if (a50) pt += 8; if (t2050) pt += 9;
+  if (a20 && a50 && t2050) why.push('tren naik (di atas SMA20 & SMA50)');
+  else if (!a50) warn.push('masih di bawah SMA50');
+  // RSI (maks 15)
+  if (rs >= 50 && rs <= 68) { pt += 15; why.push('RSI ' + rs.toFixed(0) + ' (momentum sehat)'); }
+  else if (rs > 68 && rs <= 75) pt += 7;
+  else if (rs > 75) { pt -= 10; warn.push('RSI ' + rs.toFixed(0) + ' terlalu panas, rawan koreksi'); }
+  else if (rs < 30) warn.push('RSI ' + rs.toFixed(0) + ' sangat rendah, belum ada tanda balik');
+  // MACD (maks 10)
+  if (macdPos && macdUp) { pt += 10; why.push('MACD positif & menguat'); } else if (macdUp) { pt += 5; why.push('MACD mulai menguat'); }
+  if (avgVal < 1e9) warn.push('kurang likuid (nilai transaksi rata-rata < Rp 1 miliar/hari)');
+  pt = Math.max(0, Math.min(100, pt));
+  return {pt, volX, chg1, chg5, dist, rs, why, warn, price: d.c[n]};
+}
+function renderPeluang(){
+  const box = $('#pgOut'), card = $('#pgCard'); if (!box) return;
+  const rows = Object.values(S.stocks).map(st => ({st, p: peluang(st)})).filter(x => x.p).sort((a, b) => b.p.pt - a.p.pt);
+  card.hidden = !rows.length; if (!rows.length) { box.innerHTML = ''; return; }
+  const lab = p => p >= 70 ? ['Potensi kuat', 'good'] : p >= 50 ? ['Layak dipantau', 'warn'] : ['Lemah', 'bad'];
+  const top = rows.filter(x => x.p.pt >= 50);
+  let h = top.length ? `<p style="margin:0 0 8px"><b class="pos">Berpotensi naik:</b> ${top.map(x => esc(x.st.name) + ' (' + x.p.pt + ')').join(', ')}</p>` : '<p style="margin:0 0 8px"><b>Belum ada saham yang menonjol</b> hari ini. Menunggu itu juga keputusan yang sah.</p>';
+  h += '<div class="tblwrap"><table><thead><tr><th>Saham</th><th class="num">Harga</th><th class="num">Hari ini</th><th class="num">5 hari</th><th class="num">Volume vs rata-rata</th><th class="num">Jarak ke high 20h</th><th class="num">RSI</th><th>Skor potensi</th><th>Alasan &amp; catatan</th></tr></thead><tbody>';
+  for (const {st, p} of rows) {
+    const [t, c] = lab(p.pt);
+    h += `<tr class="pick ${st.name === S.sel ? 'sel' : ''}" data-n="${esc(st.name)}" tabindex="0">
+      <td><b>${esc(st.name)}</b></td><td class="num">${fmtP(p.price)}</td>
+      <td class="num ${p.chg1 >= 0 ? 'pos' : 'neg'}">${fmtPct(p.chg1, 1)}</td><td class="num ${p.chg5 >= 0 ? 'pos' : 'neg'}">${fmtPct(p.chg5, 1)}</td>
+      <td class="num">${p.volX.toFixed(1).replace('.', ',')}×</td><td class="num">${fmtPct(p.dist, 1)}</td><td class="num">${p.rs.toFixed(0)}</td>
+      <td><span class="badge ${c}">${p.pt} · ${t}</span></td>
+      <td class="why">${p.why.map(esc).join('; ')}${p.why.length && p.warn.length ? '<br>' : ''}${p.warn.length ? '<span style="color:var(--warn)">⚠ ' + p.warn.map(esc).join('; ') + '</span>' : ''}</td></tr>`;
+  }
+  h += '</tbody></table></div><p class="note">Skor potensi 0–100: volume naik saat harga naik (25), breakout 20 hari (30), tren SMA20/SMA50 (25), RSI sehat 50–68 (15), MACD menguat (10). Beda dengan skor robot di atas: ini mencari <b>momentum awal</b>, sedangkan skor robot menilai <b>kondisi tren secara keseluruhan</b>. Gunakan keduanya, dan tetap patuhi stop loss.</p>';
+  box.innerHTML = h;
+  box.querySelectorAll('tr.pick').forEach(tr => {
+    const go = () => { S.sel = tr.dataset.n; renderAll(); window.scrollTo({top: $('#detail').offsetTop - 10, behavior: 'smooth'}); };
+    tr.onclick = go; tr.onkeydown = e => { if (e.key === 'Enter') go(); };
+  });
+}
+
+/* ===================== harga live, posisi, notifikasi ===================== */
+const LIVE = {auto: true, sec: 120, timer: null, busy: false, data: {}, err: '', lastAlert: {}};
+let TVOPEN = null;
+function wibNow(){ return new Date(Date.now() + 7 * 3600e3); }
+function pasarBuka(){
+  const t = wibNow(), dow = t.getUTCDay(), m = t.getUTCHours() * 60 + t.getUTCMinutes();
+  if (dow < 1 || dow > 5) return false;
+  return m >= 9 * 60 && m <= 16 * 60 + 5;
+}
+function posGet(k){ try { return (JSON.parse(localStorage.getItem('rs_pos') || '{}'))[k] || null; } catch (e) { return null; } }
+function posSet(k, v){ try { const o = JSON.parse(localStorage.getItem('rs_pos') || '{}'); if (v) o[k] = v; else delete o[k]; localStorage.setItem('rs_pos', JSON.stringify(o)); } catch (e) {} }
+function posLevels(st, pos){
+  const n = st.d.c.length - 1, a = st.I.atr[n], e = pos.e;
+  const stop = pos.stop > 0 ? pos.stop : (a != null ? tDown(Math.max(e - S.cfg.atrMult * a, tick(e))) : null);
+  const tp = pos.tp > 0 ? pos.tp : (stop && stop < e ? tUp(e + 2 * (e - stop)) : null);
+  return {e, stop, tp, autoStop: !(pos.stop > 0), autoTp: !(pos.tp > 0)};
+}
+function posValid(pos){ return pos && pos.e > 0 && pos.lots > 0; }
+function levelsFor(st){
+  const k = st.name, L = LIVE.data[k], o = S.stocks[k];
+  const list = [];
+  if (L) list.push({y: L.price, t: 'Harga', col: 'blue', solid: true});
+  const pos = posGet(k);
+  if (o && posValid(pos)) {
+    const lv = posLevels(o, pos);
+    list.push({y: lv.e, t: 'Beli', col: 'blue'});
+    if (lv.stop) list.push({y: lv.stop, t: 'Stop', col: 'bad'});
+    if (lv.tp) list.push({y: lv.tp, t: 'Target', col: 'good'});
+  }
+  return list.length ? {list} : null;
+}
+function liveView(st){
+  const L = LIVE.data[st.name]; if (!L || !(L.price > 0)) return null;
+  const d = st.d, n = d.c.length - 1;
+  const today = (L.time || '').slice(0, 10) || wibNow().toISOString().slice(0, 10);
+  const lastKey = d.date[n] ? d.date[n].toISOString().slice(0, 10) : '';
+  const nd = {date: d.date.slice(), o: d.o.slice(), h: d.h.slice(), l: d.l.slice(), c: d.c.slice(), v: d.v.slice()};
+  const p = L.price;
+  if (lastKey === today) {
+    nd.c[n] = p; nd.h[n] = Math.max(nd.h[n], L.high || p, p); nd.l[n] = Math.min(nd.l[n], L.low || p, p);
+    if (L.vol) nd.v[n] = Math.max(nd.v[n], L.vol);
+  } else if (today > lastKey) {
+    const o = L.open || L.prev || p;
+    nd.date.push(new Date(today + 'T00:00:00Z')); nd.o.push(o);
+    nd.h.push(Math.max(L.high || p, p, o)); nd.l.push(Math.min(L.low || p, p, o)); nd.c.push(p); nd.v.push(L.vol || 0);
+  } else return null;
+  return {name: st.name, src: st.src, d: nd, I: analyze(nd), live: true};
+}
+function statusPos(price, lv){
+  if (lv.stop && price <= lv.stop) return {code: 'stop', cls: 'bad', t: '⛔ Harga menyentuh / di bawah stop. Sesuai rencana: pertimbangkan JUAL untuk membatasi rugi.'};
+  if (lv.tp && price >= lv.tp) return {code: 'target', cls: 'good', t: '🎯 Target tercapai. Pertimbangkan ambil untung (seluruhnya atau sebagian) dan naikkan stop.'};
+  if (lv.stop && price <= lv.stop * 1.01) return {code: 'near', cls: 'warn', t: '⚠ Harga dekat stop (selisih < 1%). Siapkan keputusan.'};
+  if (lv.tp && price >= lv.tp * 0.99) return {code: 'neart', cls: 'warn', t: '⚠ Harga dekat target (selisih < 1%).'};
+  return {code: 'ok', cls: 'good', t: '✔ Masih di antara stop dan target.'};
+}
+function beep(){
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const ac = new AC();
+    [0, 0.3].forEach(t0 => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; o.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(0.15, ac.currentTime + t0); o.start(ac.currentTime + t0); o.stop(ac.currentTime + t0 + 0.2); });
+  } catch (e) {}
+}
+function notif(judul, isi){
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(judul, {body: isi}); } catch (e) {}
+}
+function cekAlert(k){
+  const L = LIVE.data[k], o = S.stocks[k], pos = posGet(k);
+  if (!L || !o || !posValid(pos)) return;
+  const s = statusPos(L.price, posLevels(o, pos)), key = s.code;
+  if (LIVE.lastAlert[k] === key) return;
+  const first = LIVE.lastAlert[k] == null; LIVE.lastAlert[k] = key;
+  if (first && key === 'ok') return;
+  if (key !== 'ok') { beep(); notif(k + ' ' + fmtP(L.price), s.t.replace(/^\S+\s/, '')); }
+}
+function fmtJam(t){ return t ? t.slice(11, 16) : '–'; }
+
+function bangunLive(st){
+  const box = $('#livecard'); if (!box) return;
+  if (st.src !== 'api') { box.innerHTML = '<h3>Harga live &amp; posisi</h3><p class="note" style="margin:0">Harga live hanya tersedia untuk saham yang dimuat dari Google Sheets (bukan data demo / tempel manual).</p>'; return; }
+  const pos = posGet(st.name) || {};
+  const v = x => x > 0 ? x : '';
+  box.innerHTML = `
+    <h3>Harga terkini &amp; posisi saya</h3>
+    <div id="liveinfo"></div>
+    <div class="row" style="margin-top:10px">
+      <label>Harga beli rata-rata <input type="number" id="pE" min="0" step="1" value="${v(pos.e)}" placeholder="mis. 4990"></label>
+      <label>Jumlah lot <input type="number" id="pL" min="0" step="1" value="${v(pos.lots)}" placeholder="mis. 1"></label>
+      <label>Stop (kosong = otomatis) <input type="number" id="pS" min="0" step="1" value="${v(pos.stop)}"></label>
+      <label>Target (kosong = otomatis) <input type="number" id="pT" min="0" step="1" value="${v(pos.tp)}"></label>
+      <button id="pClear">Hapus posisi</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="chk"><input type="checkbox" id="lvAuto" ${LIVE.auto ? 'checked' : ''}> Perbarui otomatis</label>
+      <label>Setiap <select id="lvInt"><option value="60">1 menit</option><option value="120">2 menit</option><option value="300">5 menit</option></select></label>
+      <button id="lvNow" class="primary">Perbarui sekarang</button>
+      <button id="lvNotif">Aktifkan notifikasi &amp; bunyi</button>
+    </div>
+    <div class="note" id="lvNote" style="margin-top:6px"></div>`;
+  $('#lvInt').value = String(LIVE.sec);
+  const simpan = () => {
+    const e = +$('#pE').value, lots = +$('#pL').value, stop = +$('#pS').value, tp = +$('#pT').value;
+    posSet(st.name, e > 0 ? {e, lots, stop: stop > 0 ? stop : 0, tp: tp > 0 ? tp : 0} : null);
+    LIVE.lastAlert[st.name] = null; renderLiveInfo(); redrawLive(); cekAlert(st.name);
+  };
+  ['#pE', '#pL', '#pS', '#pT'].forEach(id => $(id).addEventListener('change', simpan));
+  $('#pClear').onclick = () => { posSet(st.name, null); ['#pE', '#pL', '#pS', '#pT'].forEach(id => { $(id).value = ''; }); renderLiveInfo(); redrawLive(); };
+  $('#lvAuto').onchange = e => { LIVE.auto = e.target.checked; jadwalLive(); renderLiveInfo(); };
+  $('#lvInt').onchange = e => { LIVE.sec = +e.target.value; jadwalLive(); };
+  $('#lvNow').onclick = () => { ambilLive(true); };
+  $('#lvNotif').onclick = async () => {
+    beep();
+    if (!('Notification' in window)) { $('#lvNote').textContent = 'Browser ini tidak mendukung notifikasi; peringatan tetap muncul di halaman dan berbunyi.'; return; }
+    const r = await Notification.requestPermission();
+    $('#lvNote').textContent = r === 'granted' ? 'Notifikasi aktif (muncul selama halaman ini terbuka).' : 'Notifikasi tidak diizinkan; peringatan tetap muncul di halaman dan berbunyi.';
+  };
+  renderLiveInfo();
+}
+
+function renderLiveInfo(){
+  const el = $('#liveinfo'); if (!el) return;
+  const st = S.stocks[S.sel]; if (!st) return;
+  const L = LIVE.data[st.name], buka = pasarBuka();
+  let h = '';
+  if (!L) {
+    h = LIVE.err ? `<div class="alertbox bad">${esc(LIVE.err)}</div>` : '<p class="note" style="margin:0">Mengambil harga terkini…</p>';
+    el.innerHTML = h; return;
+  }
+  const chg = L.prev ? L.price / L.prev - 1 : null;
+  const lag = L.time ? Math.round((Date.now() - Date.parse(L.time + '+07:00')) / 60000) : null;
+  h += `<div class="head"><span class="price">${fmtP(L.price)}</span>
+    ${chg != null ? `<span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)} vs kemarin</span>` : ''}
+    <span class="pill ${buka ? 'on' : ''}">${buka ? 'Pasar buka' : 'Pasar tutup'}</span>
+    <span class="note">Data Google ${L.time ? L.time.slice(0, 10) + ' ' + fmtJam(L.time) : '–'} WIB · dicek ${new Date(L.fetched).toLocaleTimeString('id-ID', {timeZone: 'Asia/Jakarta'})}</span></div>`;
+  if (L.open || L.high || L.low) h += `<p class="note" style="margin:0 0 6px">Hari ini: buka ${fmtP(L.open)} · tertinggi ${fmtP(L.high)} · terendah ${fmtP(L.low)} · volume ${fmtP(L.vol)}</p>`;
+  if (buka && lag != null && lag > 30) h += `<p class="note" style="margin:0 0 6px">Data Google tertinggal sekitar ${lag} menit; pakai aplikasi Ajaib untuk harga eksekusi.</p>`;
+  if (LIVE.err) h += `<div class="alertbox warn">Gagal memperbarui: ${esc(LIVE.err)} (menampilkan data terakhir)</div>`;
+  const view = liveView(st);
+  const pos = posGet(st.name);
+  if (posValid(pos)) {
+    const lv = posLevels(st, pos), sh = pos.lots * 100, cost = pos.e * sh;
+    const net = (L.price - pos.e) * sh - cost * S.cfg.feeB - L.price * sh * S.cfg.feeS;
+    const s = statusPos(L.price, lv);
+    h += `<div class="alertbox ${s.cls}">${s.t}</div>
+      <div class="tiles">
+        <div class="tile"><span>Untung / rugi bersih (setelah fee)</span><b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}Rp ${fmtP(Math.abs(net))} (${fmtPct(net / cost, 2)})</b></div>
+        <div class="tile"><span>Stop ${lv.autoStop ? '(otomatis)' : ''}</span><b class="neg">${lv.stop ? fmtP(lv.stop) + ' (' + fmtPct(lv.stop / L.price - 1) + ' dari sekarang)' : '–'}</b></div>
+        <div class="tile"><span>Target ${lv.autoTp ? '(otomatis 1:2)' : ''}</span><b class="pos">${lv.tp ? fmtP(lv.tp) + ' (' + fmtPct(lv.tp / L.price - 1) + ' dari sekarang)' : '–'}</b></div>
+      </div>`;
+  }
+  if (view) {
+    const n = view.d.c.length - 1, sc = view.I.sc[n];
+    if (sc) {
+      const v = verdict(sc.total), pl = plan(view.d, view.I, S.cfg);
+      h += `<p style="margin:8px 0 4px"><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span> <span class="note">Skor sementara dengan harga sekarang: <b>${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</b> (skor penutupan terakhir: ${lastScore(st) ? (lastScore(st).total >= 0 ? '+' : '') + lastScore(st).total.toFixed(0) : '–'}). Keputusan resmi tetap memakai harga penutupan.</span></p>`;
+      if (!posValid(pos) && pl) h += `<p class="note" style="margin:0">Bila beli di sekitar ${fmtP(pl.e)}: stop ${fmtP(pl.stop)}, target 1 ${fmtP(pl.t1)}, ${pl.lots} lot sesuai modal &amp; risiko Anda.${sc.total < S.cfg.entryTh ? ' Sinyal belum memenuhi syarat beli.' : ''}</p>`;
+    }
+  }
+  el.innerHTML = h;
+  const nt = $('#lvNote');
+  if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto ? (buka ? `Otomatis diperbarui tiap ${LIVE.sec / 60} menit selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui sekarang" bila perlu.') : 'Pembaruan otomatis mati.';
+  const lg = $('#lglive'); if (lg) lg.innerHTML = '<span><i style="background:var(--s1)"></i>garis harga terkini</span>';
+}
+function redrawLive(){
+  const st = S.stocks[S.sel]; if (!st || !LAST_BT) return;
+  drawCharts(liveView(st) || st, LAST_BT);
+}
+async function ambilLive(manual){
+  const k = S.sel, st = S.stocks[k];
+  if (!st || st.src !== 'api' || LIVE.busy) return;
+  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0 || !tokenAktif()) return;
+  LIVE.busy = true;
+  const btn = $('#lvNow'); if (btn) btn.disabled = true;
+  const nt = $('#lvNote'); if (nt) { nt.dataset.keep = '1'; nt.textContent = 'Mengambil harga terkini… (5–15 detik)'; }
+  try {
+    const j = await apiGet({action: 'harga', kode: k});
+    LIVE.data[k] = Object.assign({fetched: Date.now()}, j.harga); LIVE.err = '';
+  } catch (e) { LIVE.err = e.message; }
+  LIVE.busy = false;
+  const b2 = $('#lvNow'); if (b2) b2.disabled = false;
+  const n2 = $('#lvNote'); if (n2) delete n2.dataset.keep;
+  if (S.sel === k) { renderLiveInfo(); redrawLive(); cekAlert(k); }
+  jadwalLive();
+}
+function jadwalLive(){
+  clearTimeout(LIVE.timer);
+  if (!LIVE.auto || !S.sel || document.hidden || !pasarBuka()) return;
+  LIVE.timer = setTimeout(() => ambilLive(), LIVE.sec * 1000);
+}
+function segarkanLive(paksa){
+  const L = LIVE.data[S.sel];
+  if (paksa || !L || Date.now() - L.fetched > LIVE.sec * 1000) ambilLive();
+  else jadwalLive();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(LIVE.timer); else segarkanLive(false); });
+
+function muatTV(kode){
+  TVOPEN = kode;
+  const box = $('#tvbox'); if (!box || box.dataset.k === kode) return;
+  box.dataset.k = kode; box.innerHTML = '';
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const w = document.createElement('div'); w.className = 'tradingview-widget-container'; w.style.height = '100%';
+  const inner = document.createElement('div'); inner.className = 'tradingview-widget-container__widget'; inner.style.height = '100%'; w.appendChild(inner);
+  const sc = document.createElement('script');
+  sc.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js'; sc.async = true;
+  sc.text = JSON.stringify({autosize: true, symbol: 'IDX:' + kode, interval: 'D', timezone: 'Asia/Jakarta', theme: dark ? 'dark' : 'light', style: '1', locale: 'id', allow_symbol_change: false, hide_side_toolbar: false, support_host: 'https://www.tradingview.com',
+    studies: [{id: 'MASimple@tv-basicstudies', inputs: {length: 20}}, {id: 'MASimple@tv-basicstudies', inputs: {length: 50}}]});
+  w.appendChild(sc); box.appendChild(w);
 }
 
 /* ===================== grafik ===================== */
@@ -817,7 +1127,9 @@ function drawCharts(st, bt){
   const b = n - 1, a = S.range ? Math.max(0, n - S.range) : 0;
   LAST = {st, a, b};
   const rangeOf = (arrs) => { let lo = Infinity, hi = -Infinity; for (const arr of arrs) for (let i = a; i <= b; i++) if (arr[i] != null) { lo = Math.min(lo, arr[i]); hi = Math.max(hi, arr[i]); } return [lo, hi]; };
-  let [lo, hi] = rangeOf([d.l, d.h, I.bb.l, I.bb.u]);
+  const Lv = S.stocks[st.name] ? levelsFor(st) : null;
+  let [lo, hi] = rangeOf(S.bb ? [d.l, d.h, I.bb.l, I.bb.u] : [d.l, d.h]);
+  if (Lv) for (const v of Lv.list) if (v.y > 0 && v.y > d.c[n - 1] * 0.85 && v.y < d.c[n - 1] * 1.15) { lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); }
   const pad = (hi - lo) * 0.04; lo -= pad; hi += pad;
   let maxV = 0; for (let i = a; i <= b; i++) maxV = Math.max(maxV, d.v[i]);
   const cfgC = {s1: css('--s1'), s2: css('--s2'), s3: css('--s3'), s4: css('--s4'), good: css('--good'), bad: css('--bad'), muted: css('--muted'), ink2: css('--ink2')};
@@ -825,23 +1137,43 @@ function drawCharts(st, bt){
   const geo = panel($('#cvP'), 320, {a, b, min: lo, max: hi, title: 'Harga (Rp)', fmt: v => fmtP(v),
     draw(ctx, X, Y, w, h, T, B){
       const cnt = b - a + 1, bw = Math.max(1, (w - 64) / cnt * 0.6);
-      // Bollinger
-      ctx.fillStyle = cfgC.muted; ctx.globalAlpha = 0.14; ctx.beginPath(); let started = false;
-      for (let i = a; i <= b; i++) if (I.bb.u[i] != null) { const x = X(i), y = Y(I.bb.u[i]); if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y); }
-      for (let i = b; i >= a; i--) if (I.bb.l[i] != null) ctx.lineTo(X(i), Y(I.bb.l[i]));
-      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      if (S.bb) {
+        ctx.fillStyle = cfgC.muted; ctx.globalAlpha = 0.14; ctx.beginPath(); let started = false;
+        for (let i = a; i <= b; i++) if (I.bb.u[i] != null) { const x = X(i), y = Y(I.bb.u[i]); if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y); }
+        for (let i = b; i >= a; i--) if (I.bb.l[i] != null) ctx.lineTo(X(i), Y(I.bb.l[i]));
+        ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      }
       // volume
       const vh = (h - T - B) * 0.16;
-      ctx.fillStyle = cfgC.muted; ctx.globalAlpha = 0.28;
-      for (let i = a; i <= b; i++) { const bh = maxV ? d.v[i] / maxV * vh : 0; ctx.fillRect(X(i) - bw / 2, h - B - bh, bw, bh); }
+      ctx.globalAlpha = 0.3;
+      for (let i = a; i <= b; i++) { const bh = maxV ? d.v[i] / maxV * vh : 0; ctx.fillStyle = S.ct === 'candle' ? (d.c[i] >= d.o[i] ? cfgC.good : cfgC.bad) : cfgC.muted; ctx.fillRect(X(i) - bw / 2, h - B - bh, bw, bh); }
       ctx.globalAlpha = 1;
-      line(ctx, I.sma200, X, Y, a, b, cfgC.s4, 1.5);
-      line(ctx, I.sma50, X, Y, a, b, cfgC.s3, 1.5);
-      line(ctx, I.sma20, X, Y, a, b, cfgC.s2, 1.5);
-      line(ctx, d.c, X, Y, a, b, cfgC.s1, 2);
+      if (S.s200) line(ctx, I.sma200, X, Y, a, b, cfgC.s4, 1.5);
+      if (S.ct === 'candle') {
+        const cw2 = Math.max(1, (w - 64) / cnt * 0.72);
+        for (let i = a; i <= b; i++) {
+          const up = d.c[i] >= d.o[i], col = up ? cfgC.good : cfgC.bad, x = X(i);
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, Y(d.h[i])); ctx.lineTo(Math.round(x) + 0.5, Y(d.l[i])); ctx.stroke();
+          const y0 = Y(d.o[i]), y1 = Y(d.c[i]);
+          ctx.fillRect(x - cw2 / 2, Math.min(y0, y1), cw2, Math.max(1, Math.abs(y1 - y0)));
+        }
+      }
+      line(ctx, I.sma50, X, Y, a, b, cfgC.s3, 1.6);
+      line(ctx, I.sma20, X, Y, a, b, cfgC.s2, 1.6);
+      if (S.ct !== 'candle') line(ctx, d.c, X, Y, a, b, cfgC.s1, 2);
       for (const t of bt.trades.concat(bt.open ? [{iIn: bt.open.iIn, iOut: -1}] : [])) {
         if (t.iIn >= a && t.iIn <= b) tri(ctx, X(t.iIn), Y(d.l[t.iIn]) + 12, true, cfgC.good);
         if (t.iOut >= a && t.iOut <= b) tri(ctx, X(t.iOut), Y(d.h[t.iOut]) - 12, false, cfgC.bad);
+      }
+      if (Lv) for (const v of Lv.list) {
+        if (!(v.y >= lo && v.y <= hi)) continue;
+        const y = Math.round(Y(v.y)) + 0.5, col = v.col === 'good' ? cfgC.good : v.col === 'bad' ? cfgC.bad : cfgC.s1;
+        ctx.strokeStyle = col; ctx.lineWidth = v.solid ? 1.2 : 1; ctx.setLineDash(v.solid ? [] : [5, 4]);
+        ctx.beginPath(); ctx.moveTo(geoL(), y); ctx.lineTo(w - 10, y); ctx.stroke(); ctx.setLineDash([]);
+        const txt = v.t + ' ' + fmtP(v.y); ctx.font = '11px system-ui,sans-serif'; const tw = ctx.measureText(txt).width + 8;
+        ctx.fillStyle = col; ctx.fillRect(w - 10 - tw, y - 8, tw, 16);
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, w - 10 - tw + 4, y);
       }
     }});
   panel($('#cvR'), 110, {a, b, min: 0, max: 100, title: 'RSI (14)', fmt: v => v.toFixed(0),
@@ -903,7 +1235,13 @@ function bindHover(){
 }
 let rz;
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.sel && S.stocks[S.sel]) renderDetail(); }, 150); });
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (S.sel) renderDetail(); });
+(function(){
+  const root = document.documentElement, b = $('#btnTema');
+  const pasang = t => { root.dataset.theme = t; b.textContent = t === 'dark' ? '☀ Terang' : '🌙 Gelap'; try { localStorage.setItem('rs_tema', t); } catch (e) {} };
+  let t0 = 'dark'; try { t0 = localStorage.getItem('rs_tema') || 'dark'; } catch (e) {}
+  pasang(t0);
+  b.onclick = () => { pasang(root.dataset.theme === 'dark' ? 'light' : 'dark'); const k = $('#tvbox'); if (k) { k.dataset.k = ''; } if (S.sel) renderDetail(); };
+})();
 readCfg();
 try { const t0 = localStorage.getItem('rs_tok'); if (t0) { $('#tok').value = t0; muatDariApi(); } } catch (e) {}
 </script>
