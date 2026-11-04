@@ -501,6 +501,12 @@ $('#btnDemo').onclick = () => {
 };
 
 /* ===================== muat dari Google Sheets (API) ===================== */
+function fmtUpd(u){
+  const d = new Date(u);
+  if (isNaN(d)) return String(u || '').replace('T', ' ');
+  try { return d.toLocaleString('sv-SE', {timeZone: 'Asia/Jakarta'}).slice(0, 16); } catch (e) { return String(u); }
+}
+
 async function muatDariApi(){
   const st = $('#srcStat'), er = $('#srcErr'); er.textContent = '';
   if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App Anda (lihat panduan).'; return; }
@@ -532,7 +538,7 @@ async function muatDariApi(){
     const ranked = Object.values(S.stocks).map(s => ({n: s.name, sc: lastScore(s)})).filter(x => x.sc).sort((a, b) => b.sc.total - a.sc.total);
     if (ranked.length) S.sel = ranked[0].n;
     renderAll();
-    st.textContent = Object.keys(S.stocks).length + ' saham, diperbarui ' + String(j.updated || '').replace('T', ' ') + ' WIB';
+    st.textContent = Object.keys(S.stocks).length + ' saham, diperbarui ' + fmtUpd(j.updated) + ' WIB';
   } catch (e) { st.textContent = ''; er.textContent = e.message; }
   $('#btnLoad').disabled = false;
 }
