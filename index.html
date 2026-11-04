@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Analisa Saham IDX - Rekomendasi Beli / Jual</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#f6f6f4; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#85847f;
+  --line:#e3e2dd; --grid:#ecebe7; --s1:#2a78d6; --s2:#eb6834; --s3:#6250d6; --s4:#1baf7a;
+  --good:#0b7a3e; --warn:#a86400; --bad:#cc3b3a;
+  --good-bg:#e6f3ec; --warn-bg:#fbf0dc; --bad-bg:#fae8e7;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    --bg:#121211; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e86;
+    --line:#2e2e2b; --grid:#262624; --s1:#3987e5; --s2:#d95926; --s3:#9085e9; --s4:#199e70;
+    --good:#4cc27f; --warn:#e0a030; --bad:#ef6b6a;
+    --good-bg:#16291f; --warn-bg:#2d2412; --bad-bg:#2f1a1a;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px 14px 48px}
+h1{font-size:22px;margin:4px 0 2px}
+h2{font-size:18px;margin:0}
+h3{font-size:15px;margin:0 0 8px}
+.sub{color:var(--ink2);font-size:13px;margin:0 0 14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+label{display:flex;flex-direction:column;font-size:12px;color:var(--ink2);gap:3px}
+input,textarea,select,button{font:inherit;color:var(--ink)}
+input[type=text],input[type=number],textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+input[type=number]{width:110px}
+textarea{width:100%;min-height:90px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
+button{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 12px;cursor:pointer}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff}
+button:focus-visible,input:focus-visible,textarea:focus-visible,tr[tabindex]:focus-visible{outline:2px solid var(--s1);outline-offset:1px}
+button.seg{padding:5px 10px;font-size:13px}
+button.seg[aria-pressed=true]{background:var(--s1);color:#fff;border-color:var(--s1)}
+details summary{cursor:pointer;color:var(--ink2);font-size:13px}
+.note{font-size:12.5px;color:var(--ink2)}
+.err{color:var(--bad);font-size:13px;margin-top:6px;min-height:18px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--ink2);font-weight:600;font-size:12px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.pick{cursor:pointer}
+tr.pick:hover{background:var(--bg)}
+tr.sel{background:var(--bg)}
+.badge{display:inline-flex;gap:6px;align-items:center;padding:3px 9px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid transparent}
+.badge.good{background:var(--good-bg);color:var(--ink);border-color:var(--good)}
+.badge.warn{background:var(--warn-bg);color:var(--ink);border-color:var(--warn)}
+.badge.bad{background:var(--bad-bg);color:var(--ink);border-color:var(--bad)}
+.badge i{font-style:normal}
+.badge.good i{color:var(--good)} .badge.warn i{color:var(--warn)} .badge.bad i{color:var(--bad)}
+.head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:12px}
+.price{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:12px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.meter{position:relative;height:14px;background:var(--bg);border:1px solid var(--line);border-radius:7px;margin:8px 0 4px;overflow:hidden}
+.meter .mid{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--muted)}
+.meter .fill{position:absolute;top:0;bottom:0}
+.scale{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.bar{position:relative;height:8px;background:var(--bg);border-radius:4px;min-width:90px}
+.bar .mid{position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:var(--muted)}
+.bar .fill{position:absolute;top:0;bottom:0;border-radius:2px}
+.why{white-space:normal;min-width:200px;color:var(--ink2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.tile{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.tile b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--ink2)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink2);margin:8px 0}
+.legend i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.chartwrap{position:relative;touch-action:pan-y}
+.chartwrap canvas{display:block}
+.vline{position:absolute;top:0;bottom:0;width:1px;background:var(--muted);pointer-events:none;display:none}
+.tip{position:absolute;top:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px;pointer-events:none;display:none;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,.12);z-index:3}
+.warnlist{margin:8px 0 0;padding-left:18px;font-size:13px}
+.warnlist li{margin:2px 0}
+.disc{font-size:12px;color:var(--muted);margin-top:18px}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Robot Analisa Saham IDX</h1>
+  <p class="sub">Data harga dari Google Sheets Anda, dianalisa otomatis: grafik, skor −100 s/d +100, rekomendasi beli/jual, rencana trade (stop loss, target, jumlah lot), dan backtest.</p>
+
+  <div class="card" id="srcCard">
+    <h3>Data dari Google Sheets</h3>
+    <div class="row">
+      <label>Kata sandi API <input type="password" id="tok" autocomplete="off" style="width:230px"></label>
+      <button class="primary" id="btnLoad">Muat data terbaru</button>
+      <span class="note" id="srcStat"></span>
+    </div>
+    <div class="note" style="margin-top:6px">Kata sandi dibuat di Google Sheets lewat menu Robot Saham &gt; 4. Buat / lihat kata sandi API. Disimpan hanya di browser ini. Data diperbarui otomatis tiap hari bursa tutup bila jadwal otomatis di Sheets sudah dipasang.</div>
+    <div class="err" id="srcErr" role="alert"></div>
+  </div>
+
+  <details class="card">
+    <summary>Cadangan: tempel atau unggah data manual</summary>
+    <div style="margin-top:10px">
+    <h3>Masukkan data harian (OHLCV)</h3>
+    <div class="row" style="margin-bottom:10px">
+      <label>Kode saham <input type="text" id="ticker" placeholder="BBCA" maxlength="12" style="width:100px"></label>
+      <label>Atau unggah file CSV (boleh banyak) <input type="file" id="files" accept=".csv,.txt,.tsv" multiple></label>
+      <button id="btnDemo">Muat data contoh (sintetis)</button>
+    </div>
+    <textarea id="paste" placeholder="Tempel data di sini: kolom Date, Open, High, Low, Close, Volume (dipisah koma, titik koma, atau tab). Boleh langsung salin dari Google Sheets."></textarea>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="btnAdd">Analisa &amp; tambah ke watchlist</button>
+      <span class="note" id="count"></span>
+    </div>
+    <div class="err" id="err" role="alert"></div>
+    <details>
+      <summary>Dari mana ambil datanya?</summary>
+      <div class="note" style="margin-top:6px">
+        • <b>Google Sheets</b>: ketik <code>=GOOGLEFINANCE("IDX:BBCA";"all";TODAY()-500;TODAY();"DAILY")</code> (pakai koma bila Sheets berbahasa Inggris), lalu salin hasilnya dan tempel di kotak di atas. Umumnya data IDX tersedia, tetapi bisa tertunda.<br>
+        • <b>TradingView</b>: ekspor data grafik ke CSV (fitur ini umumnya hanya di paket berbayar).<br>
+        • Minimal 40 baris; disarankan ≥ 250 hari agar SMA200 terhitung. Urutan tanggal lama→baru atau sebaliknya sama-sama dikenali.<br>
+        • Data tidak disimpan di mana pun; tutup halaman berarti data hilang.
+      </div>
+    </details>
+    </div>
+  </details>
+
+  <div class="card">
+    <h3>Pengaturan (hitungan lot &amp; backtest)</h3>
+    <div class="row">
+      <label>Modal (Rp) <input type="number" id="cCap" value="5000000" min="0" step="100000"></label>
+      <label>Risiko per trade (%) <input type="number" id="cRisk" value="2" min="0.1" max="10" step="0.1"></label>
+      <label>Stop = ATR ×  <input type="number" id="cAtr" value="2" min="0.5" max="6" step="0.5"></label>
+      <label>Skor beli ≥ <input type="number" id="cIn" value="25" min="-100" max="100" step="5"></label>
+      <label>Skor keluar ≤ <input type="number" id="cOut" value="0" min="-100" max="100" step="5"></label>
+      <label>Fee beli (%) <input type="number" id="cFb" value="0.15" min="0" step="0.01"></label>
+      <label>Fee jual (%) <input type="number" id="cFs" value="0.25" min="0" step="0.01"></label>
+    </div>
+    <div class="note" style="margin-top:6px">Fee hanya contoh; sesuaikan dengan tarif sekuritas Anda (termasuk pajak/levy). Modal &amp; risiko dipakai untuk menghitung jumlah lot.</div>
+  </div>
+
+  <div class="card" id="wlCard" hidden>
+    <h3>Rekomendasi hari ini (urut skor tertinggi)</h3>
+    <div id="ringkas" style="margin-bottom:8px"></div>
+    <div class="tblwrap"><table id="wl"></table></div>
+  </div>
+
+  <section id="detail" hidden></section>
+
+  <p class="disc">Alat edukasi, bukan saran investasi. “Robot” ini adalah sistem skor berbasis aturan indikator teknikal; ia tidak memprediksi harga dan tidak menjamin hasil. Hasil backtest masa lalu tidak menjamin masa depan. Keputusan dan risiko sepenuhnya ada pada Anda.</p>
+</div>
+
+<script>
+"use strict";
+/* ===== PENGATURAN: isi dengan URL Web App Apps Script Anda (berakhiran /exec) ===== */
+const API_URL = "https://script.google.com/macros/s/AKfycbwQ23rpLY1jZs3SA-NNZA0pmntsyEnA67AQ_Qh2fhAAu0__UN6tMfTQFK9oCV9JOwHF/exec";
+/* ===================== util ===================== */
+const $ = s => document.querySelector(s);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtP = (n, d = 0) => n == null || isNaN(n) ? '–' : n.toLocaleString('id-ID', {maximumFractionDigits: d, minimumFractionDigits: d});
+const fmtPct = (n, d = 1) => n == null || isNaN(n) ? '–' : (n >= 0 ? '+' : '') + (n * 100).toFixed(d).replace('.', ',') + '%';
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const fmtD = d => d ? d.toISOString().slice(0, 10) : '';
+
+/* ===================== parsing ===================== */
+function parseNum(s){
+  if (s == null) return NaN;
+  s = String(s).trim().replace(/[Rp\s%]/g, '');
+  if (s === '' || s === '-') return NaN;
+  const hasC = s.includes(','), hasD = s.includes('.');
+  if (hasC && hasD) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (hasC) {
+    if (/^-?\d{1,3}(,\d{3})+$/.test(s)) s = s.replace(/,/g, ''); else s = s.replace(',', '.');
+  } else if (hasD) {
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  }
+  return Number(s);
+}
+function parseDate(s){
+  s = String(s).trim().replace(/^"|"$/g, '');
+  if (/^\d{9,13}$/.test(s)) { const v = +s; return new Date(v < 1e11 ? v * 1000 : v); }
+  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+  if (m) {
+    let a = +m[1], b = +m[2], y = +m[3], d, mo;
+    if (a > 12) { d = a; mo = b; } else if (b > 12) { mo = a; d = b; } else { d = a; mo = b; }
+    return new Date(Date.UTC(y, mo - 1, d));
+  }
+  const t = Date.parse(s);
+  return isNaN(t) ? null : new Date(t);
+}
+function parseTable(text){
+  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+  if (lines.length < 3) throw new Error('Data terlalu sedikit. Tempel header + minimal 40 baris harga.');
+  const f = lines[0];
+  const delim = f.includes('\t') ? '\t' : (f.split(';').length > f.split(',').length ? ';' : ',');
+  const split = l => l.split(delim).map(x => x.trim().replace(/^"|"$/g, ''));
+  const head = split(f);
+  const hasHead = head.some(h => /[a-zA-Z]{3,}/.test(h)) && isNaN(parseNum(head[1]));
+  let idx = {d:0, o:1, h:2, l:3, c:4, v:5}, start = 0;
+  if (hasHead) {
+    start = 1;
+    const low = head.map(h => h.toLowerCase());
+    const find = (...res) => { for (const r of res) { const k = low.findIndex(h => r.test(h)); if (k >= 0) return k; } return -1; };
+    idx = {
+      d: find(/^(date|time|tanggal|datetime)/),
+      o: find(/^(open|buka|pembukaan)/),
+      h: find(/^(high|tinggi|tertinggi)/),
+      l: find(/^(low|rendah|terendah)/),
+      c: find(/^close$/, /^(close|penutupan|tutup|last|price|harga)/),
+      v: find(/^(volume|vol)/)
+    };
+    if (idx.c < 0) throw new Error('Kolom Close tidak ditemukan. Pastikan baris pertama berisi nama kolom (Date, Open, High, Low, Close, Volume).');
+  }
+  const d = {date: [], o: [], h: [], l: [], c: [], v: []};
+  for (let i = start; i < lines.length; i++) {
+    const cols = split(lines[i]);
+    const c = parseNum(cols[idx.c]);
+    if (!(c > 0)) continue;
+    const g = k => idx[k] >= 0 ? parseNum(cols[idx[k]]) : NaN;
+    let o = g('o'), h = g('h'), l = g('l');
+    if (!(o > 0)) o = c; if (!(h > 0)) h = c; if (!(l > 0)) l = c;
+    h = Math.max(h, o, c); l = Math.min(l, o, c);
+    const v = idx.v >= 0 ? parseNum(cols[idx.v]) : 0;
+    d.date.push(idx.d >= 0 ? parseDate(cols[idx.d]) : null);
+    d.o.push(o); d.h.push(h); d.l.push(l); d.c.push(c); d.v.push(isNaN(v) ? 0 : v);
+  }
+  const n = d.c.length;
+  if (n < 40) throw new Error('Hanya ' + n + ' baris harga valid terbaca. Dibutuhkan minimal 40 (disarankan ≥ 250).');
+  const a = d.date[0], b = d.date[n - 1];
+  if (a && b && a > b) for (const k of Object.keys(d)) d[k].reverse();
+  return d;
+}
+
+/* ===================== indikator ===================== */
+function sma(a, n){
+  const r = Array(a.length).fill(null); let s = 0;
+  for (let i = 0; i < a.length; i++) { s += a[i]; if (i >= n) s -= a[i - n]; if (i >= n - 1) r[i] = s / n; }
+  return r;
+}
+function ema(a, n){
+  const r = Array(a.length).fill(null), k = 2 / (n + 1);
+  let p = null, s = 0, cnt = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] == null) continue;
+    if (p == null) { s += a[i]; cnt++; if (cnt === n) { p = s / n; r[i] = p; } }
+    else { p = a[i] * k + p * (1 - k); r[i] = p; }
+  }
+  return r;
+}
+function rsi(c, n = 14){
+  const r = Array(c.length).fill(null);
+  if (c.length <= n) return r;
+  let g = 0, l = 0;
+  for (let i = 1; i <= n; i++) { const d = c[i] - c[i-1]; if (d >= 0) g += d; else l -= d; }
+  g /= n; l /= n;
+  r[n] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  for (let i = n + 1; i < c.length; i++) {
+    const d = c[i] - c[i-1];
+    g = (g * (n-1) + Math.max(d, 0)) / n; l = (l * (n-1) + Math.max(-d, 0)) / n;
+    r[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  }
+  return r;
+}
+function atr(d, n = 14){
+  const len = d.c.length, r = Array(len).fill(null), tr = [d.h[0] - d.l[0]];
+  for (let i = 1; i < len; i++) tr.push(Math.max(d.h[i] - d.l[i], Math.abs(d.h[i] - d.c[i-1]), Math.abs(d.l[i] - d.c[i-1])));
+  if (len < n) return r;
+  let a = 0; for (let i = 0; i < n; i++) a += tr[i]; a /= n; r[n-1] = a;
+  for (let i = n; i < len; i++) { a = (a * (n-1) + tr[i]) / n; r[i] = a; }
+  return r;
+}
+function boll(c, n = 20, k = 2){
+  const m = sma(c, n), u = Array(c.length).fill(null), l = Array(c.length).fill(null);
+  for (let i = n - 1; i < c.length; i++) {
+    let s = 0; for (let j = i - n + 1; j <= i; j++) s += (c[j] - m[i]) ** 2;
+    const sd = Math.sqrt(s / n); u[i] = m[i] + k * sd; l[i] = m[i] - k * sd;
+  }
+  return {m, u, l};
+}
+
+/* ===================== skor robot ===================== */
+const W = {short:15, mid:20, long:15, rsi:15, macd:20, brk:10, vol:10};
+function rsiVal(r){
+  if (r >= 70) return Math.max(0.8 - (r - 70) / 15 * 1.1, -0.4);
+  if (r >= 50) return (r - 50) / 20 * 0.8;
+  if (r >= 30) return -(50 - r) / 20 * 0.8;
+  return Math.min(-0.8 + (30 - r) / 10, 0.2);
+}
+function scoreAt(i, d, I){
+  if (i < 34) return null;
+  const c = d.c[i], comps = [];
+  const add = (k, name, v, why) => { if (v != null) comps.push({k, name, w: W[k], v, why}); };
+  // tren pendek
+  const s20 = I.sma20[i], s20p = I.sma20[i-3];
+  if (s20 != null && s20p != null) {
+    const up = s20 > s20p;
+    add('short', 'Tren pendek (SMA20)', (c > s20 ? 0.6 : -0.6) + (up ? 0.4 : -0.4),
+      `Harga ${c > s20 ? 'di atas' : 'di bawah'} SMA20 (${fmtP(s20)}), garis SMA20 ${up ? 'naik' : 'turun'}.`);
+  }
+  const s50 = I.sma50[i];
+  if (s50 != null) add('mid', 'Tren menengah (SMA50)', (c > s50 ? 0.5 : -0.5) + (s20 > s50 ? 0.5 : -0.5),
+      `Harga ${c > s50 ? 'di atas' : 'di bawah'} SMA50 (${fmtP(s50)}); SMA20 ${s20 > s50 ? 'di atas' : 'di bawah'} SMA50.`);
+  const s200 = I.sma200[i];
+  if (s200 != null) add('long', 'Tren panjang (SMA200)', (c > s200 ? 0.5 : -0.5) + (s50 > s200 ? 0.5 : -0.5),
+      `Harga ${c > s200 ? 'di atas' : 'di bawah'} SMA200 (${fmtP(s200)}); SMA50 ${s50 > s200 ? 'di atas' : 'di bawah'} SMA200.`);
+  const r = I.rsi[i];
+  if (r != null) {
+    let t = r >= 70 ? 'sudah jenuh beli, rawan koreksi' : r >= 50 ? 'momentum naik sehat' : r >= 30 ? 'momentum lemah' : 'jenuh jual, mungkin memantul tapi belum terkonfirmasi';
+    add('rsi', 'Momentum (RSI14)', rsiVal(r), `RSI ${r.toFixed(0)}: ${t}.`);
+  }
+  const h = I.hist[i], hp = I.hist[i-1];
+  if (h != null && hp != null) {
+    let v, t;
+    if (h > 0 && h > hp) { v = 1; t = 'histogram positif dan menguat'; }
+    else if (h > 0) { v = 0.3; t = 'histogram positif tapi melemah'; }
+    else if (h > hp) { v = -0.3; t = 'histogram negatif tapi mulai membaik'; }
+    else { v = -1; t = 'histogram negatif dan memburuk'; }
+    add('macd', 'MACD (12,26,9)', v, 'MACD: ' + t + '.');
+  }
+  if (i >= 20) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - 20; j < i; j++) { hh = Math.max(hh, d.h[j]); ll = Math.min(ll, d.l[j]); }
+    let v, t;
+    if (c > hh) { v = 1; t = `breakout, harga menembus high 20 hari (${fmtP(hh)})`; }
+    else if (c < ll) { v = -1; t = `breakdown, harga menembus low 20 hari (${fmtP(ll)})`; }
+    else { const pos = (c - ll) / ((hh - ll) || 1); v = (pos - 0.5) * 1.2; t = `harga di ${(pos * 100).toFixed(0)}% rentang 20 hari (${fmtP(ll)}–${fmtP(hh)})`; }
+    add('brk', 'Posisi / breakout 20 hari', v, t.charAt(0).toUpperCase() + t.slice(1) + '.');
+  }
+  if (i >= 20) {
+    let s = 0; for (let j = i - 20; j < i; j++) s += d.v[j]; s /= 20;
+    if (s > 0 && d.v[i] > 0) {
+      const vr = d.v[i] / s, dir = Math.sign(c - d.c[i-1]);
+      add('vol', 'Konfirmasi volume', dir * clamp((vr - 0.8) / 1.2, 0, 1),
+        `Volume ${vr.toFixed(1).replace('.', ',')}× rata-rata 20 hari; ${vr < 0.8 ? 'sepi, tidak memberi konfirmasi' : dir >= 0 ? 'ramai saat naik (positif)' : 'ramai saat turun (negatif)'}.`);
+    }
+  }
+  const tw = comps.reduce((a, b) => a + b.w, 0);
+  if (!tw) return null;
+  const total = comps.reduce((a, b) => a + b.w * b.v, 0) / tw * 100;
+  return {total, comps};
+}
+function verdict(s){
+  if (s >= 50) return {t:'BELI KUAT', cls:'good', ic:'▲▲'};
+  if (s >= 25) return {t:'BELI / AKUMULASI', cls:'good', ic:'▲'};
+  if (s > -25) return {t:'TUNGGU', cls:'warn', ic:'●'};
+  if (s > -50) return {t:'HINDARI / KURANGI', cls:'bad', ic:'▼'};
+  return {t:'JUAL / HINDARI', cls:'bad', ic:'▼▼'};
+}
+function analyze(d){
+  const c = d.c, n = c.length;
+  const I = {sma20: sma(c,20), sma50: sma(c,50), sma200: sma(c,200), rsi: rsi(c), atr: atr(d), bb: boll(c)};
+  const e12 = ema(c,12), e26 = ema(c,26);
+  I.macd = c.map((_, i) => e12[i] != null && e26[i] != null ? e12[i] - e26[i] : null);
+  I.sig = ema(I.macd, 9);
+  I.hist = I.macd.map((m, i) => m != null && I.sig[i] != null ? m - I.sig[i] : null);
+  I.sc = Array.from({length: n}, (_, i) => scoreAt(i, d, I));
+  return I;
+}
+
+/* ===================== tick IDX, rencana trade ===================== */
+function tick(p){ return p < 200 ? 1 : p < 500 ? 2 : p < 2000 ? 5 : p < 5000 ? 10 : 25; }
+const tDown = p => Math.floor(p / tick(p) + 1e-9) * tick(p);
+const tUp = p => Math.ceil(p / tick(p) - 1e-9) * tick(p);
+function plan(d, I, cfg){
+  const n = d.c.length - 1, entry = d.c[n], a = I.atr[n];
+  if (a == null) return null;
+  const e = tUp(entry);
+  let stop = tDown(Math.max(e - cfg.atrMult * a, tick(e)));
+  const risk = e - stop;
+  if (risk <= 0) return null;
+  const t1 = tUp(e + 2 * risk), t2 = tUp(e + 3 * risk);
+  const riskAmt = cfg.cap * cfg.riskPct / 100;
+  const byRisk = Math.floor(riskAmt / (risk * 100));
+  const byCash = Math.floor(cfg.cap / (e * 100 * (1 + cfg.feeB)));
+  const lots = Math.max(0, Math.min(byRisk, byCash));
+  const sh = lots * 100, cost = sh * e;
+  return {e, stop, risk, t1, t2, riskAmt, byRisk, byCash, lots, sh, cost,
+    lossStop: sh * risk + cost * cfg.feeB + sh * stop * cfg.feeS,
+    gainT1: sh * (t1 - e) - cost * cfg.feeB - sh * t1 * cfg.feeS,
+    atrPct: a / entry};
+}
+
+/* ===================== backtest ===================== */
+function backtest(d, I, cfg){
+  const n = d.c.length, start = 34;
+  let cash = 1, pos = null, pb = false, ps = false, blocked = false, inBars = 0;
+  const trades = [], eq = [];
+  const sell = (i, px, why) => {
+    const proceeds = pos.sh * px * (1 - cfg.feeS);
+    trades.push({iIn: pos.i, iOut: i, pIn: pos.px, pOut: px, ret: proceeds / pos.cash0 - 1, why});
+    cash = proceeds; pos = null;
+  };
+  for (let i = start; i < n; i++) {
+    if (pb && !pos) { pos = {i, px: d.o[i], sh: cash * (1 - cfg.feeB) / d.o[i], cash0: cash, stop: d.o[i] - cfg.atrMult * pos_atr, }; cash = 0; }
+    pb = false;
+    if (ps && pos) { sell(i, d.o[i], 'sinyal keluar'); }
+    ps = false;
+    if (pos && d.l[i] <= pos.stop) { sell(i, Math.min(d.o[i], pos.stop), 'stop loss'); blocked = true; }
+    if (pos) inBars++;
+    eq.push(pos ? pos.sh * d.c[i] : cash);
+    const s = I.sc[i];
+    if (s) {
+      if (blocked && s.total < cfg.entryTh) blocked = false;
+      if (!pos && !blocked && s.total >= cfg.entryTh && I.atr[i] != null) { pb = true; pos_atr = I.atr[i]; }
+      if (pos && s.total <= cfg.exitTh) ps = true;
+    }
+  }
+  let open = null;
+  if (pos) open = {iIn: pos.i, pIn: pos.px, ret: pos.sh * d.c[n-1] * (1 - cfg.feeS) / pos.cash0 - 1};
+  const total = eq[eq.length - 1] - 1;
+  const bh = d.c[n-1] / d.c[start] * (1 - cfg.feeB) * (1 - cfg.feeS) - 1;
+  const bhEq = d.c.slice(start).map(x => x / d.c[start]);
+  let peak = 1, mdd = 0; for (const e of eq) { peak = Math.max(peak, e); mdd = Math.min(mdd, e / peak - 1); }
+  const wins = trades.filter(t => t.ret > 0), loss = trades.filter(t => t.ret <= 0);
+  const gw = wins.reduce((a, t) => a + t.ret, 0), gl = -loss.reduce((a, t) => a + t.ret, 0);
+  return {trades, open, eq, bhEq, total, bh, mdd, n: trades.length,
+    win: trades.length ? wins.length / trades.length : null,
+    avgW: wins.length ? gw / wins.length : null, avgL: loss.length ? -gl / loss.length : null,
+    pf: gl > 0 ? gw / gl : (gw > 0 ? Infinity : null), expo: inBars / eq.length, start};
+}
+let pos_atr = 0;
+
+/* ===================== data contoh ===================== */
+function rng(seed){ return () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296; }
+function synth(seed, p0, drift, vol, n = 320){
+  const r = rng(seed), d = {date: [], o: [], h: [], l: [], c: [], v: []};
+  let p = p0, day = new Date(); day.setUTCHours(0,0,0,0); day.setUTCDate(day.getUTCDate() - Math.round(n * 1.45));
+  const gauss = () => { let s = 0; for (let k = 0; k < 6; k++) s += r(); return (s - 3) / 0.7071; };
+  while (d.c.length < n) {
+    day.setUTCDate(day.getUTCDate() + 1);
+    const wd = day.getUTCDay(); if (wd === 0 || wd === 6) continue;
+    const o = p, drift2 = drift * (1 + 0.8 * Math.sin(d.c.length / 40));
+    const ret = drift2 + vol * gauss();
+    let c = Math.max(o * (1 + ret), 50);
+    const o2 = Math.round(o / tick(o)) * tick(o), c2 = Math.round(c / tick(c)) * tick(c);
+    const hi = Math.max(o2, c2) * (1 + Math.abs(vol * gauss()) * 0.6), lo = Math.min(o2, c2) * (1 - Math.abs(vol * gauss()) * 0.6);
+    d.date.push(new Date(day)); d.o.push(o2); d.c.push(c2);
+    d.h.push(Math.ceil(hi / tick(hi)) * tick(hi)); d.l.push(Math.floor(lo / tick(lo)) * tick(lo));
+    d.v.push(Math.round((8e6 + 6e6 * r()) * (1 + 4 * Math.abs(ret) / vol * 0.15)));
+    p = c2;
+  }
+  return d;
+}
+
+/* ===================== state ===================== */
+const S = {stocks: {}, sel: null, range: 120, cfg: {}};
+function readCfg(){
+  const g = id => parseFloat($(id).value);
+  S.cfg = {cap: g('#cCap') || 0, riskPct: g('#cRisk') || 1, atrMult: g('#cAtr') || 2, entryTh: g('#cIn'), exitTh: g('#cOut'),
+    feeB: (g('#cFb') || 0) / 100, feeS: (g('#cFs') || 0) / 100};
+}
+function addStock(name, d){
+  name = (name || 'SAHAM').toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 12) || 'SAHAM';
+  S.stocks[name] = {name, d, I: analyze(d)};
+  S.sel = name;
+}
+function lastScore(st){
+  for (let i = st.d.c.length - 1; i >= 0; i--) if (st.I.sc[i]) return st.I.sc[i];
+  return null;
+}
+
+/* ===================== UI: input ===================== */
+function setErr(m){ $('#err').textContent = m || ''; }
+function afterAdd(){ readCfg(); renderAll(); }
+$('#btnAdd').onclick = () => {
+  setErr('');
+  try {
+    const txt = $('#paste').value.trim();
+    if (!txt) throw new Error('Kotak data masih kosong. Tempel data atau unggah file CSV.');
+    const d = parseTable(txt);
+    addStock($('#ticker').value || 'SAHAM', d);
+    $('#paste').value = '';
+    afterAdd();
+  } catch (e) { setErr(e.message); }
+};
+$('#files').onchange = async ev => {
+  setErr(''); const errs = [];
+  for (const f of ev.target.files) {
+    try {
+      const d = parseTable(await f.text());
+      let nm = f.name.replace(/\.[^.]+$/, '').replace(/^IDX_DLY_/i, '').split(/[ ,_]/)[0];
+      addStock(nm, d);
+    } catch (e) { errs.push(f.name + ': ' + e.message); }
+  }
+  ev.target.value = '';
+  if (errs.length) setErr(errs.join(' | '));
+  afterAdd();
+};
+$('#btnDemo').onclick = () => {
+  setErr('');
+  addStock('DEMO-NAIK', synth(11, 6800, 0.0009, 0.011));
+  addStock('DEMO-TURUN', synth(23, 4200, -0.0010, 0.014));
+  addStock('DEMO-SAMPING', synth(37, 1850, 0.0000, 0.012));
+  S.sel = 'DEMO-NAIK';
+  afterAdd();
+};
+
+/* ===================== muat dari Google Sheets (API) ===================== */
+async function muatDariApi(){
+  const st = $('#srcStat'), er = $('#srcErr'); er.textContent = '';
+  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App Anda (lihat panduan).'; return; }
+  const tok = $('#tok').value.trim();
+  if (!tok) { er.textContent = 'Masukkan kata sandi API dulu.'; return; }
+  st.textContent = 'Memuat...'; $('#btnLoad').disabled = true;
+  try {
+    let res;
+    try { res = await fetch(API_URL + '?token=' + encodeURIComponent(tok)); }
+    catch (e) { throw new Error('Tidak bisa menghubungi Web App. Periksa URL, koneksi internet, dan pengaturan deployment (akses: Anyone).'); }
+    let j;
+    try { j = await res.json(); }
+    catch (e) { throw new Error('Respons bukan data. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.'); }
+    if (!j.ok) throw new Error(j.error || 'Gagal memuat data.');
+    if (!j.stocks || !j.stocks.length) throw new Error('Data kosong. Jalankan menu Robot Saham > 2. Analisa sekarang di Google Sheets.');
+    S.stocks = {};
+    j.stocks.forEach(x => {
+      try {
+        addStock(x.kode, {date: x.d.map(t => new Date(t + 'T00:00:00Z')), o: x.o, h: x.h, l: x.l, c: x.c, v: x.v});
+      } catch (e) {}
+    });
+    if (j.cfg) {
+      const set = (id, v) => { if (v != null && !isNaN(v)) $(id).value = v; };
+      set('#cCap', j.cfg.cap); set('#cRisk', j.cfg.riskPct); set('#cAtr', j.cfg.atrMult);
+      set('#cIn', j.cfg.entryTh); set('#cOut', j.cfg.exitTh); set('#cFb', j.cfg.feeB); set('#cFs', j.cfg.feeS);
+    }
+    try { localStorage.setItem('rs_tok', tok); } catch (e) {}
+    readCfg();
+    const ranked = Object.values(S.stocks).map(s => ({n: s.name, sc: lastScore(s)})).filter(x => x.sc).sort((a, b) => b.sc.total - a.sc.total);
+    if (ranked.length) S.sel = ranked[0].n;
+    renderAll();
+    st.textContent = Object.keys(S.stocks).length + ' saham, diperbarui ' + String(j.updated || '').replace('T', ' ') + ' WIB';
+  } catch (e) { st.textContent = ''; er.textContent = e.message; }
+  $('#btnLoad').disabled = false;
+}
+$('#btnLoad').onclick = muatDariApi;
+$('#tok').addEventListener('keydown', e => { if (e.key === 'Enter') muatDariApi(); });
+
+['#cCap','#cRisk','#cAtr','#cIn','#cOut','#cFb','#cFs'].forEach(id => $(id).addEventListener('input', () => { readCfg(); renderAll(); }));
+
+/* ===================== UI: render ===================== */
+function renderAll(){
+  const names = Object.keys(S.stocks);
+  $('#wlCard').hidden = !names.length;
+  $('#detail').hidden = !names.length;
+  $('#count').textContent = names.length ? names.length + ' saham di watchlist' : '';
+  if (!names.length) return;
+  renderWatch(); renderDetail();
+}
+function meterHTML(v){
+  const w = Math.abs(v) / 2, col = v >= 0 ? 'var(--good)' : 'var(--bad)';
+  return `<div class="bar" aria-hidden="true"><div class="mid"></div><div class="fill" style="${v >= 0 ? 'left:50%' : 'right:50%'};width:${w}%;background:${col}"></div></div>`;
+}
+function renderWatch(){
+  const rows = Object.values(S.stocks).map(st => ({st, sc: lastScore(st)})).filter(x => x.sc).sort((a, b) => b.sc.total - a.sc.total);
+  const rk = $('#ringkas');
+  const nm = a => a.map(x => esc(x.st.name) + ' (' + (x.sc.total >= 0 ? '+' : '') + x.sc.total.toFixed(0) + ')').join(', ');
+  const beli = rows.filter(x => x.sc.total >= S.cfg.entryTh), hindari = rows.filter(x => x.sc.total <= -25), tunggu = rows.filter(x => x.sc.total < S.cfg.entryTh && x.sc.total > -25);
+  rk.innerHTML = '<div><b class="pos">Kandidat beli:</b> ' + (beli.length ? nm(beli) : 'tidak ada yang memenuhi syarat beli hari ini') + '</div>'
+    + (tunggu.length ? '<div><b style="color:var(--warn)">Tunggu:</b> ' + nm(tunggu) + '</div>' : '')
+    + (hindari.length ? '<div><b class="neg">Hindari / kurangi:</b> ' + nm(hindari) + '</div>' : '');
+  let h = '<thead><tr><th>Saham</th><th class="num">Harga</th><th>Skor</th><th class="num"></th><th>Sinyal</th><th class="num">RSI</th><th class="num">Backtest</th><th class="num">Buy&amp;Hold</th><th></th></tr></thead><tbody>';
+  for (const {st, sc} of rows) {
+    const n = st.d.c.length - 1, v = verdict(sc.total), bt = backtest(st.d, st.I, S.cfg);
+    h += `<tr class="pick ${st.name === S.sel ? 'sel' : ''}" data-n="${esc(st.name)}" tabindex="0">
+      <td><b>${esc(st.name)}</b></td><td class="num">${fmtP(st.d.c[n])}</td><td>${meterHTML(sc.total)}</td>
+      <td class="num">${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</td>
+      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span></td>
+      <td class="num">${st.I.rsi[n] != null ? st.I.rsi[n].toFixed(0) : '–'}</td>
+      <td class="num ${bt.total >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.total)}</td>
+      <td class="num ${bt.bh >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.bh)}</td>
+      <td><button class="seg" data-x="${esc(st.name)}" aria-label="Hapus ${esc(st.name)}">×</button></td></tr>`;
+  }
+  $('#wl').innerHTML = h + '</tbody>';
+  $('#wl').querySelectorAll('tr.pick').forEach(tr => {
+    const go = () => { S.sel = tr.dataset.n; renderAll(); };
+    tr.onclick = go; tr.onkeydown = e => { if (e.key === 'Enter') go(); };
+  });
+  $('#wl').querySelectorAll('button[data-x]').forEach(b => b.onclick = e => {
+    e.stopPropagation(); delete S.stocks[b.dataset.x];
+    if (S.sel === b.dataset.x) S.sel = Object.keys(S.stocks)[0] || null;
+    renderAll();
+  });
+}
+
+function renderDetail(){
+  const st = S.stocks[S.sel]; if (!st) { $('#detail').innerHTML = ''; return; }
+  const {d, I} = st, n = d.c.length - 1, sc = lastScore(st);
+  if (!sc) { $('#detail').innerHTML = '<div class="card">Data belum cukup untuk dihitung.</div>'; return; }
+  const v = verdict(sc.total), cfg = S.cfg, pl = plan(d, I, cfg), bt = backtest(d, I, cfg);
+  const chg = n > 0 ? d.c[n] / d.c[n-1] - 1 : 0;
+  const lastDate = d.date[n];
+  const warns = [];
+  if (I.rsi[n] > 75) warns.push('RSI sangat tinggi (>75): rawan koreksi, jangan mengejar harga.');
+  if (I.sma200[n] != null && d.c[n] < I.sma200[n]) warns.push('Harga di bawah SMA200: tren jangka panjang masih turun.');
+  if (pl && pl.atrPct > 0.04) warns.push('Volatilitas tinggi (ATR ' + (pl.atrPct * 100).toFixed(1).replace('.', ',') + '% dari harga): ukuran posisi sebaiknya lebih kecil.');
+  if (I.sma200[n] == null) warns.push('Data < 200 hari: komponen tren panjang (SMA200) tidak ikut dihitung.');
+  if (n < 120) warns.push('Data pendek, hasil backtest kurang bermakna.');
+  if (lastDate && !st.name.startsWith('DEMO') && (Date.now() - lastDate.getTime()) / 864e5 > 7) warns.push('Data terakhir bertanggal ' + fmtD(lastDate) + ' (lebih dari 7 hari lalu); perbarui sebelum mengambil keputusan.');
+  if (st.name.startsWith('DEMO')) warns.push('Ini data sintetis untuk mencoba alat, bukan harga pasar sebenarnya.');
+
+  const compRows = sc.comps.map(c => `<tr><td>${esc(c.name)}</td><td class="num">${c.w}</td><td>${meterHTML(c.v * 100)}</td><td class="num ${c.v >= 0 ? 'pos' : 'neg'}">${c.v >= 0 ? '+' : ''}${(c.v * c.w).toFixed(1).replace('.', ',')}</td><td class="why">${esc(c.why)}</td></tr>`).join('');
+  const buyOK = sc.total >= cfg.entryTh;
+  let planHTML;
+  if (!pl) planHTML = '<p class="note">ATR belum tersedia.</p>';
+  else planHTML = `
+    ${buyOK ? '' : '<p class="note" style="margin-top:0">Sinyal belum memenuhi syarat beli; rencana di bawah hanya simulasi bila Anda tetap ingin masuk.</p>'}
+    <table>
+      <tr><td>Harga acuan masuk</td><td class="num"><b>${fmtP(pl.e)}</b></td></tr>
+      <tr><td>Stop loss (${cfg.atrMult}× ATR)</td><td class="num neg">${fmtP(pl.stop)} (${fmtPct(pl.stop / pl.e - 1)})</td></tr>
+      <tr><td>Target 1 (rasio 1:2)</td><td class="num pos">${fmtP(pl.t1)} (${fmtPct(pl.t1 / pl.e - 1)})</td></tr>
+      <tr><td>Target 2 (rasio 1:3)</td><td class="num pos">${fmtP(pl.t2)} (${fmtPct(pl.t2 / pl.e - 1)})</td></tr>
+      <tr><td>Risiko per lembar</td><td class="num">Rp ${fmtP(pl.risk)}</td></tr>
+      <tr><td>Anggaran risiko (${cfg.riskPct}% modal)</td><td class="num">Rp ${fmtP(pl.riskAmt)}</td></tr>
+      <tr><td>Jumlah lot disarankan</td><td class="num"><b>${pl.lots} lot</b> (${fmtP(pl.sh)} lembar)</td></tr>
+      <tr><td>Nilai pembelian</td><td class="num">Rp ${fmtP(pl.cost)}</td></tr>
+      <tr><td>Perkiraan rugi bila kena stop</td><td class="num neg">−Rp ${fmtP(pl.lossStop)}</td></tr>
+      <tr><td>Perkiraan untung di Target 1</td><td class="num pos">+Rp ${fmtP(pl.gainT1)}</td></tr>
+    </table>
+    ${pl.lots === 0 ? `<p class="note">Jumlah lot 0: ${pl.byCash < 1 ? 'modal belum cukup untuk 1 lot.' : 'dengan aturan risiko ini, 1 lot sudah melebihi anggaran risiko (naikkan modal/risiko atau perlebar jarak stop).'}</p>` : ''}
+    <p class="note">Harga dibulatkan ke fraksi harga BEI. Stop/target adalah rencana, bukan jaminan eksekusi (bisa gap, ARB/ARA).</p>`;
+
+  const tiles = [
+    ['Return strategi', fmtPct(bt.total), bt.total >= 0 ? 'pos' : 'neg'],
+    ['Buy &amp; hold', fmtPct(bt.bh), bt.bh >= 0 ? 'pos' : 'neg'],
+    ['Max drawdown', fmtPct(bt.mdd), 'neg'],
+    ['Jumlah trade', String(bt.n) + (bt.open ? ' (+1 terbuka)' : ''), ''],
+    ['Win rate', bt.win == null ? '–' : (bt.win * 100).toFixed(0) + '%', ''],
+    ['Profit factor', bt.pf == null ? '–' : bt.pf === Infinity ? '∞' : bt.pf.toFixed(2).replace('.', ','), ''],
+    ['Waktu di pasar', (bt.expo * 100).toFixed(0) + '%', '']
+  ].map(t => `<div class="tile"><span>${t[0]}</span><b class="${t[2]}">${t[1]}</b></div>`).join('');
+  const tradeRows = bt.trades.slice(-10).reverse().map(t => `<tr><td>${fmtD(d.date[t.iIn]) || '#' + t.iIn}</td><td>${fmtD(d.date[t.iOut]) || '#' + t.iOut}</td><td class="num">${fmtP(t.pIn)}</td><td class="num">${fmtP(t.pOut)}</td><td class="num ${t.ret >= 0 ? 'pos' : 'neg'}">${fmtPct(t.ret)}</td><td>${t.why}</td></tr>`).join('');
+
+  const tbl = [];
+  for (let i = n; i > Math.max(n - 15, -1); i--) {
+    const s = I.sc[i];
+    tbl.push(`<tr><td>${fmtD(d.date[i]) || '#' + i}</td><td class="num">${fmtP(d.o[i])}</td><td class="num">${fmtP(d.h[i])}</td><td class="num">${fmtP(d.l[i])}</td><td class="num">${fmtP(d.c[i])}</td><td class="num">${fmtP(d.v[i])}</td><td class="num">${I.rsi[i] != null ? I.rsi[i].toFixed(0) : '–'}</td><td class="num">${I.hist[i] != null ? I.hist[i].toFixed(1) : '–'}</td><td class="num">${s ? s.total.toFixed(0) : '–'}</td></tr>`);
+  }
+
+  $('#detail').innerHTML = `
+    <div class="card">
+      <div class="head">
+        <h2>${esc(st.name)}</h2>
+        <span class="price">${fmtP(d.c[n])}</span>
+        <span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)} ${lastDate ? '· ' + fmtD(lastDate) : ''}</span>
+        <span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span>
+      </div>
+      <div class="meter" role="img" aria-label="Skor ${sc.total.toFixed(0)} dari −100 sampai +100">
+        <div class="mid"></div>
+        <div class="fill" style="${sc.total >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(sc.total) / 2}%;background:${sc.total >= 0 ? 'var(--good)' : 'var(--bad)'}"></div>
+      </div>
+      <div class="scale"><span>−100 jual</span><span><b style="color:var(--ink);font-size:13px">Skor ${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</b></span><span>+100 beli</span></div>
+      ${warns.length ? '<ul class="warnlist">' + warns.map(w => '<li>⚠ ' + esc(w) + '</li>').join('') + '</ul>' : ''}
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h3>Mengapa skornya begitu?</h3>
+        <div class="tblwrap"><table><thead><tr><th>Komponen</th><th class="num">Bobot</th><th>Arah</th><th class="num">Poin</th><th>Penjelasan</th></tr></thead><tbody>${compRows}</tbody></table></div>
+      </div>
+      <div class="card"><h3>Rencana trade (posisi beli)</h3>${planHTML}</div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h3 style="margin:0">Grafik &amp; sinyal backtest</h3>
+        <div class="row" id="rng" style="gap:6px">${[60,120,250,0].map(r => `<button class="seg" data-r="${r}" aria-pressed="${S.range === r}">${r || 'Semua'}</button>`).join('')}</div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--s1)"></i>Harga penutupan</span>
+        <span><i style="background:var(--s2)"></i>SMA20</span>
+        <span><i style="background:var(--s3)"></i>SMA50</span>
+        <span><i style="background:var(--s4)"></i>SMA200</span>
+        <span><i style="background:var(--muted);opacity:.5"></i>Bollinger (20,2)</span>
+        <span><b style="color:var(--good)">▲</b> beli (backtest)</span>
+        <span><b style="color:var(--bad)">▼</b> keluar (backtest)</span>
+      </div>
+      <div class="chartwrap" id="cw">
+        <canvas id="cvP"></canvas><canvas id="cvR"></canvas><canvas id="cvM"></canvas><canvas id="cvS"></canvas>
+        <div class="vline" id="vl"></div><div class="tip" id="tip"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Backtest aturan robot pada data ini</h3>
+      <p class="note" style="margin-top:0">Aturan: beli di harga buka hari berikutnya saat skor ≥ ${cfg.entryTh}; keluar saat skor ≤ ${cfg.exitTh} atau kena stop ${cfg.atrMult}× ATR. Hanya posisi beli, modal penuh, fee dihitung, tanpa slippage.</p>
+      <div class="tiles">${tiles}</div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Strategi robot</span><span><i style="background:var(--s2)"></i>Buy &amp; hold</span></div>
+      <div class="chartwrap"><canvas id="cvE"></canvas></div>
+      ${tradeRows ? `<div class="tblwrap" style="margin-top:10px"><table><thead><tr><th>Masuk</th><th>Keluar</th><th class="num">Harga masuk</th><th class="num">Harga keluar</th><th class="num">Hasil</th><th>Alasan</th></tr></thead><tbody>${tradeRows}</tbody></table></div>` : '<p class="note">Belum ada trade selesai pada data ini.</p>'}
+    </div>
+
+    <details class="card"><summary>Tabel data &amp; indikator terbaru (alternatif teks untuk grafik)</summary>
+      <div class="tblwrap"><table><thead><tr><th>Tanggal</th><th class="num">Open</th><th class="num">High</th><th class="num">Low</th><th class="num">Close</th><th class="num">Volume</th><th class="num">RSI</th><th class="num">MACD hist</th><th class="num">Skor</th></tr></thead><tbody>${tbl.join('')}</tbody></table></div>
+    </details>`;
+
+  $('#rng').querySelectorAll('button').forEach(b => b.onclick = () => { S.range = +b.dataset.r; renderDetail(); });
+  drawCharts(st, bt);
+}
+
+/* ===================== grafik ===================== */
+function panel(cv, h, o){
+  const dpr = window.devicePixelRatio || 1, w = cv.parentElement.clientWidth || 600;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const L = 54, R = 10, T = 18, B = 4, cnt = o.b - o.a + 1;
+  const X = i => L + (i - o.a + 0.5) / cnt * (w - L - R);
+  const Y = v => T + (o.max - v) / ((o.max - o.min) || 1) * (h - T - B);
+  ctx.font = '11px system-ui,sans-serif'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = css('--grid'); ctx.fillStyle = css('--muted'); ctx.lineWidth = 1;
+  ctx.textAlign = 'right';
+  for (let k = 0; k <= 4; k++) {
+    const v = o.min + (o.max - o.min) * k / 4, y = Math.round(Y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(w - R, y); ctx.stroke();
+    ctx.fillText(o.fmt(v), L - 6, y);
+  }
+  ctx.textAlign = 'left'; ctx.fillStyle = css('--ink2'); ctx.fillText(o.title, L, 8);
+  o.draw(ctx, X, Y, w, h, T, B);
+  return {X, L, R, w, cnt};
+}
+function line(ctx, arr, X, Y, a, b, col, lw = 1.6, dash){
+  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.setLineDash(dash || []); ctx.beginPath();
+  let pen = false;
+  for (let i = a; i <= b; i++) {
+    if (arr[i] == null) { pen = false; continue; }
+    const x = X(i), y = Y(arr[i]);
+    if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+}
+function tri(ctx, x, y, up, col){
+  ctx.fillStyle = col; ctx.strokeStyle = css('--surface'); ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (up) { ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y + 5); ctx.lineTo(x - 6, y + 5); }
+  else { ctx.moveTo(x, y + 6); ctx.lineTo(x + 6, y - 5); ctx.lineTo(x - 6, y - 5); }
+  ctx.closePath(); ctx.stroke(); ctx.fill();
+}
+let LAST = null;
+function drawCharts(st, bt){
+  const {d, I} = st, n = d.c.length;
+  const b = n - 1, a = S.range ? Math.max(0, n - S.range) : 0;
+  LAST = {st, a, b};
+  const rangeOf = (arrs) => { let lo = Infinity, hi = -Infinity; for (const arr of arrs) for (let i = a; i <= b; i++) if (arr[i] != null) { lo = Math.min(lo, arr[i]); hi = Math.max(hi, arr[i]); } return [lo, hi]; };
+  let [lo, hi] = rangeOf([d.l, d.h, I.bb.l, I.bb.u]);
+  const pad = (hi - lo) * 0.04; lo -= pad; hi += pad;
+  let maxV = 0; for (let i = a; i <= b; i++) maxV = Math.max(maxV, d.v[i]);
+  const cfgC = {s1: css('--s1'), s2: css('--s2'), s3: css('--s3'), s4: css('--s4'), good: css('--good'), bad: css('--bad'), muted: css('--muted'), ink2: css('--ink2')};
+
+  const geo = panel($('#cvP'), 320, {a, b, min: lo, max: hi, title: 'Harga (Rp)', fmt: v => fmtP(v),
+    draw(ctx, X, Y, w, h, T, B){
+      const cnt = b - a + 1, bw = Math.max(1, (w - 64) / cnt * 0.6);
+      // Bollinger
+      ctx.fillStyle = cfgC.muted; ctx.globalAlpha = 0.14; ctx.beginPath(); let started = false;
+      for (let i = a; i <= b; i++) if (I.bb.u[i] != null) { const x = X(i), y = Y(I.bb.u[i]); if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y); }
+      for (let i = b; i >= a; i--) if (I.bb.l[i] != null) ctx.lineTo(X(i), Y(I.bb.l[i]));
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      // volume
+      const vh = (h - T - B) * 0.16;
+      ctx.fillStyle = cfgC.muted; ctx.globalAlpha = 0.28;
+      for (let i = a; i <= b; i++) { const bh = maxV ? d.v[i] / maxV * vh : 0; ctx.fillRect(X(i) - bw / 2, h - B - bh, bw, bh); }
+      ctx.globalAlpha = 1;
+      line(ctx, I.sma200, X, Y, a, b, cfgC.s4, 1.5);
+      line(ctx, I.sma50, X, Y, a, b, cfgC.s3, 1.5);
+      line(ctx, I.sma20, X, Y, a, b, cfgC.s2, 1.5);
+      line(ctx, d.c, X, Y, a, b, cfgC.s1, 2);
+      for (const t of bt.trades.concat(bt.open ? [{iIn: bt.open.iIn, iOut: -1}] : [])) {
+        if (t.iIn >= a && t.iIn <= b) tri(ctx, X(t.iIn), Y(d.l[t.iIn]) + 12, true, cfgC.good);
+        if (t.iOut >= a && t.iOut <= b) tri(ctx, X(t.iOut), Y(d.h[t.iOut]) - 12, false, cfgC.bad);
+      }
+    }});
+  panel($('#cvR'), 110, {a, b, min: 0, max: 100, title: 'RSI (14)', fmt: v => v.toFixed(0),
+    draw(ctx, X, Y, w){
+      ctx.strokeStyle = cfgC.muted; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      for (const lv of [30, 70]) { ctx.beginPath(); ctx.moveTo(geoL(), Y(lv)); ctx.lineTo(w - 10, Y(lv)); ctx.stroke(); }
+      ctx.setLineDash([]); line(ctx, I.rsi, X, Y, a, b, cfgC.s3, 1.8);
+    }});
+  let [mlo, mhi] = rangeOf([I.macd, I.sig, I.hist]); const mm = Math.max(Math.abs(mlo), Math.abs(mhi)) * 1.1 || 1;
+  panel($('#cvM'), 110, {a, b, min: -mm, max: mm, title: 'MACD (garis biru), sinyal (putus-putus), histogram', fmt: v => fmtP(v, Math.abs(v) < 10 ? 1 : 0),
+    draw(ctx, X, Y, w){
+      const bw = Math.max(1, (w - 64) / (b - a + 1) * 0.6);
+      for (let i = a; i <= b; i++) if (I.hist[i] != null) {
+        ctx.globalAlpha = 0.65; ctx.fillStyle = I.hist[i] >= 0 ? cfgC.s4 : cfgC.s2;
+        const y0 = Y(0), y1 = Y(I.hist[i]); ctx.fillRect(X(i) - bw / 2, Math.min(y0, y1), bw, Math.max(1, Math.abs(y1 - y0)));
+      }
+      ctx.globalAlpha = 1;
+      line(ctx, I.macd, X, Y, a, b, cfgC.s1, 1.6); line(ctx, I.sig, X, Y, a, b, cfgC.ink2, 1.4, [4, 3]);
+    }});
+  const scArr = I.sc.map(s => s ? s.total : null);
+  panel($('#cvS'), 120, {a, b, min: -100, max: 100, title: 'Skor robot (garis hijau = ambang beli, putus-putus abu = ambang keluar)', fmt: v => v.toFixed(0),
+    draw(ctx, X, Y, w){
+      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = cfgC.good; ctx.beginPath(); ctx.moveTo(geoL(), Y(S.cfg.entryTh)); ctx.lineTo(w - 10, Y(S.cfg.entryTh)); ctx.stroke();
+      ctx.strokeStyle = cfgC.muted; ctx.beginPath(); ctx.moveTo(geoL(), Y(S.cfg.exitTh)); ctx.lineTo(w - 10, Y(S.cfg.exitTh)); ctx.stroke();
+      ctx.setLineDash([]); line(ctx, scArr, X, Y, a, b, cfgC.s1, 1.8);
+    }});
+  LAST.geo = geo;
+
+  // equity
+  const eLen = bt.eq.length;
+  const [elo, ehi] = (() => { let lo = Infinity, hi = -Infinity; for (const x of bt.eq.concat(bt.bhEq)) { lo = Math.min(lo, x); hi = Math.max(hi, x); } return [lo * 0.97, hi * 1.03]; })();
+  panel($('#cvE'), 200, {a: 0, b: eLen - 1, min: elo, max: ehi, title: 'Nilai modal (awal = 1,00)', fmt: v => v.toFixed(2).replace('.', ','),
+    draw(ctx, X, Y){
+      line(ctx, bt.bhEq, X, Y, 0, eLen - 1, cfgC.s2, 1.8);
+      line(ctx, bt.eq, X, Y, 0, eLen - 1, cfgC.s1, 2);
+    }});
+  bindHover();
+}
+function geoL(){ return 54; }
+function bindHover(){
+  const cw = $('#cw'), vl = $('#vl'), tip = $('#tip');
+  const move = e => {
+    if (!LAST) return;
+    const {st, a, b} = LAST, {d, I} = st, r = cw.getBoundingClientRect();
+    const w = r.width, L = 54, R = 10, cnt = b - a + 1;
+    const x = e.clientX - r.left;
+    if (x < L || x > w - R) return hide();
+    const i = clamp(a + Math.floor((x - L) / (w - L - R) * cnt), a, b);
+    const px = L + (i - a + 0.5) / cnt * (w - L - R);
+    vl.style.display = 'block'; vl.style.left = px + 'px';
+    const s = I.sc[i], v = s ? verdict(s.total) : null;
+    tip.innerHTML = `<b>${fmtD(d.date[i]) || '#' + i}</b><br>O ${fmtP(d.o[i])} · H ${fmtP(d.h[i])}<br>L ${fmtP(d.l[i])} · C ${fmtP(d.c[i])}<br>Vol ${fmtP(d.v[i])}<br>SMA20 ${fmtP(I.sma20[i])} · RSI ${I.rsi[i] != null ? I.rsi[i].toFixed(0) : '–'}<br>Skor ${s ? (s.total >= 0 ? '+' : '') + s.total.toFixed(0) + ' · ' + v.t : '–'}`;
+    tip.style.display = 'block';
+    tip.style.left = (px > w / 2 ? px - tip.offsetWidth - 10 : px + 10) + 'px';
+  };
+  const hide = () => { vl.style.display = 'none'; tip.style.display = 'none'; };
+  cw.onpointermove = move; cw.onpointerdown = move; cw.onpointerleave = hide;
+}
+let rz;
+window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (S.sel && S.stocks[S.sel]) renderDetail(); }, 150); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (S.sel) renderDetail(); });
+readCfg();
+try { const t0 = localStorage.getItem('rs_tok'); if (t0) { $('#tok').value = t0; muatDariApi(); } } catch (e) {}
+</script>
+</body>
+</html>
