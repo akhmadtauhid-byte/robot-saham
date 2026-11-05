@@ -20,6 +20,17 @@
   --good-bg:#0a1f15; --warn-bg:#2a2008; --bad-bg:#2a0e0e;
 }
 :root[data-theme="dark"] button.primary{color:#04101f;font-weight:600}
+.authbox{max-width:430px;margin:18px auto}
+.authbox h3{font-size:17px}
+.authbox label{margin-bottom:10px}
+.authbox input{width:100%}
+.pwrow{position:relative}
+.pwrow button{position:absolute;right:4px;top:22px;padding:4px 8px;font-size:12px}
+.acct{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between}
+.acct .who{font-weight:600}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--ink2);margin-left:6px}
+button.danger{border-color:var(--bad);color:var(--bad)}
+.code{font:600 20px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:2px;padding:4px 10px;background:var(--bg);border:1px dashed var(--line);border-radius:6px;display:inline-block}
 .themebtn{position:absolute;right:14px;top:14px;padding:5px 10px;font-size:13px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -32,7 +43,7 @@ h3{font-size:15px;margin:0 0 8px}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 label{display:flex;flex-direction:column;font-size:12px;color:var(--ink2);gap:3px}
 input,textarea,select,button{font:inherit;color:var(--ink)}
-input[type=text],input[type=number],textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
+input[type=text],input[type=number],input[type=email],input[type=password],textarea{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;min-width:0}
 input[type=number]{width:110px}
 textarea{width:100%;min-height:90px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
 button{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 12px;cursor:pointer}
@@ -98,23 +109,73 @@ tr.sel{background:var(--bg)}
 <div class="wrap">
   <button class="themebtn" id="btnTema" aria-label="Ganti tema terang/gelap"></button>
   <h1>Robot Analisa Saham IDX</h1>
-  <p class="sub">Data harga dari Google Sheets Anda, dianalisa otomatis: grafik, skor −100 s/d +100, rekomendasi beli/jual, rencana trade (stop loss, target, jumlah lot), dan backtest.</p>
+  <p class="sub">Analisa saham IDX untuk akun pribadi Anda: grafik, skor −100 s/d +100, rekomendasi beli/jual, rencana trade (stop loss, target, jumlah lot), dan backtest. Watchlist, posisi, dan pengaturan tersimpan per akun.</p>
+
+  <div class="card authbox" id="authView">
+    <div class="row" style="gap:6px;margin-bottom:12px">
+      <button class="seg" id="tabMasuk" aria-pressed="true">Masuk</button>
+      <button class="seg" id="tabDaftar" aria-pressed="false">Daftar akun baru</button>
+    </div>
+    <form id="formMasuk" autocomplete="on">
+      <h3>Masuk</h3>
+      <label>Email <input type="email" id="mEmail" autocomplete="username" required></label>
+      <label class="pwrow">Kata sandi <input type="password" id="mSandi" autocomplete="current-password" required><button type="button" class="seg" data-eye="mSandi">Lihat</button></label>
+      <button class="primary" type="submit" id="btnMasuk">Masuk</button>
+    </form>
+    <form id="formDaftar" autocomplete="on" hidden>
+      <h3>Daftar akun baru</h3>
+      <label>Nama <input type="text" id="dNama" autocomplete="name" maxlength="40" required></label>
+      <label>Email <input type="email" id="dEmail" autocomplete="username" required></label>
+      <label class="pwrow">Kata sandi (minimal 8 karakter) <input type="password" id="dSandi" autocomplete="new-password" required><button type="button" class="seg" data-eye="dSandi">Lihat</button></label>
+      <label>Kode undangan (dari admin) <input type="text" id="dUndangan" autocomplete="off" maxlength="12" style="text-transform:uppercase" required></label>
+      <label class="chk" style="align-items:flex-start"><input type="checkbox" id="dSetuju" required> <span>Saya paham ini alat edukasi, bukan saran investasi, dan keputusan beli/jual sepenuhnya tanggung jawab saya.</span></label>
+      <button class="primary" type="submit" id="btnDaftar">Daftar &amp; masuk</button>
+      <p class="note" style="margin:8px 0 0">Nama dan email Anda disimpan di Google Sheets milik admin sistem ini. Gunakan kata sandi yang berbeda dari akun penting Anda (email, bank, dan lainnya).</p>
+    </form>
+    <div class="err" id="authErr" role="alert"></div>
+    <div class="note" id="authStat"></div>
+  </div>
+
+  <div id="appView" hidden>
+  <div class="card">
+    <div class="acct">
+      <div><span class="who" id="whoNama"></span><span class="chip" id="whoPeran"></span><div class="note" id="whoEmail"></div></div>
+      <div class="row" style="gap:6px">
+        <button id="btnAdmin" hidden>Panel admin</button>
+        <button id="btnUbahSandi">Ubah kata sandi</button>
+        <button id="btnKeluar">Keluar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="pwCard" hidden>
+    <h3>Ubah kata sandi</h3>
+    <div class="row">
+      <label>Kata sandi lama <input type="password" id="pwLama" autocomplete="current-password"></label>
+      <label>Kata sandi baru (min. 8 karakter) <input type="password" id="pwBaru" autocomplete="new-password"></label>
+      <button class="primary" id="btnPwSimpan">Simpan</button>
+      <button id="btnPwBatal">Batal</button>
+    </div>
+    <div class="note" id="pwStat" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card" id="adminCard" hidden>
+    <h3>Panel admin</h3>
+    <div id="adminBody"><p class="note">Memuat…</p></div>
+  </div>
 
   <div class="card" id="srcCard">
-    <h3>Data dari Google Sheets</h3>
+    <h3>Watchlist saya</h3>
     <div class="row">
-      <label>Kata sandi API <input type="password" id="tok" autocomplete="off" style="width:230px"></label>
-      <button class="primary" id="btnLoad">Muat data terbaru</button>
-      <span class="note" id="srcStat"></span>
-    </div>
-    <div class="note" style="margin-top:6px">Kata sandi dibuat di Google Sheets lewat menu Robot Saham &gt; 4. Buat / lihat kata sandi API. Disimpan hanya di browser ini. Data diperbarui otomatis tiap hari bursa tutup bila jadwal otomatis di Sheets sudah dipasang.</div>
-    <div class="row" style="margin-top:12px">
       <label>Tambah saham baru (kode) <input type="text" id="newKode" maxlength="6" placeholder="contoh: ANTM" autocomplete="off" style="width:140px;text-transform:uppercase"></label>
       <button class="primary" id="btnTambah">Tambah &amp; analisa</button>
-      <button id="btnAnalisa" title="Menarik ulang data semua saham di watchlist (beberapa menit)">Analisa ulang semua</button>
+      <button id="btnLoad">Muat ulang</button>
+      <button id="btnSegarkan" title="Mengambil ulang data harga saham di watchlist Anda yang belum diperbarui hari ini">Perbarui data saham saya</button>
     </div>
-    <div class="note" id="kelolaStat" style="margin-top:6px"></div>
+    <div class="note" id="srcStat" style="margin-top:6px"></div>
+    <div class="note" id="kelolaStat" style="margin-top:4px"></div>
     <div class="err" id="srcErr" role="alert"></div>
+    <div class="note">Data harga dari Google Finance (harian, diperbarui otomatis tiap sore hari bursa). Saham yang sudah dipantau pengguna lain langsung tersedia tanpa menunggu.</div>
   </div>
 
   <details class="card">
@@ -171,6 +232,8 @@ tr.sel{background:var(--bg)}
   </div>
 
   <section id="detail" hidden></section>
+
+    </div><!-- /appView -->
 
   <p class="disc">Alat edukasi, bukan saran investasi. “Robot” ini adalah sistem skor berbasis aturan indikator teknikal; ia tidak memprediksi harga dan tidak menjamin hasil. Hasil backtest masa lalu tidak menjamin masa depan. Keputusan dan risiko sepenuhnya ada pada Anda.</p>
 </div>
@@ -471,7 +534,7 @@ function synth(seed, p0, drift, vol, n = 320){
 }
 
 /* ===================== state ===================== */
-const S = {stocks: {}, sel: null, range: 120, cfg: {}, ct: 'candle', bb: false, s200: false};
+const S = {stocks: {}, pos: {}, sel: null, range: 120, cfg: {}, ct: 'candle', bb: false, s200: false};
 let LAST_BT = null;
 function readCfg(){
   const g = id => parseFloat($(id).value);
@@ -531,24 +594,30 @@ function fmtUpd(u){
   try { return d.toLocaleString('sv-SE', {timeZone: 'Asia/Jakarta'}).slice(0, 16); } catch (e) { return String(u); }
 }
 
-function tokenAktif(){ return $('#tok').value.trim(); }
+const SES = {token: '', user: null};
+function tokenAktif(){ return SES.token; }
 function apiSiap(){
   const er = $('#srcErr'); er.textContent = '';
-  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App Anda (lihat panduan).'; return false; }
-  if (!tokenAktif()) { er.textContent = 'Masukkan kata sandi API dulu.'; return false; }
+  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App (lihat panduan).'; return false; }
+  if (!SES.token) { er.textContent = 'Anda belum masuk.'; return false; }
   return true;
 }
-async function apiGet(params){
-  const q = new URLSearchParams(Object.assign({token: tokenAktif()}, params));
+// Semua permintaan memakai POST (text/plain agar tidak memicu preflight CORS di Apps Script).
+async function api(aksi, body){
+  const payload = Object.assign({}, body || {}, {action: aksi, token: SES.token});
   let res;
-  try { res = await fetch(API_URL + '?' + q.toString()); }
-  catch (e) { throw new Error('Tidak bisa menghubungi Web App. Periksa URL, koneksi internet, dan pengaturan deployment (akses: Anyone).'); }
+  try { res = await fetch(API_URL, {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify(payload)}); }
+  catch (e) { throw new Error('Tidak bisa menghubungi server. Periksa koneksi internet, URL Web App, dan pengaturan deployment (akses: Anyone).'); }
   let j;
   try { j = await res.json(); }
   catch (e) { throw new Error('Respons bukan data. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.'); }
-  if (!j.ok) throw new Error(j.error || 'Permintaan gagal.');
+  if (!j.ok) {
+    if (j.sesi === false && SES.token) keluarLokal('Sesi berakhir. Silakan masuk lagi.');
+    const er = new Error(j.error || 'Permintaan gagal.'); er.data = j; throw er;
+  }
   return j;
 }
+function apiGet(params){ return api((params && params.action) || 'data', params); }
 function masukkanSaham(x){
   addStock(x.kode, {date: x.d.map(t => new Date(t + 'T00:00:00Z')), o: x.o, h: x.h, l: x.l, c: x.c, v: x.v});
   if (S.stocks[x.kode]) S.stocks[x.kode].src = 'api';
@@ -565,19 +634,22 @@ function terapkanData(j){
     set('#cCap', j.cfg.cap); set('#cRisk', j.cfg.riskPct); set('#cAtr', j.cfg.atrMult);
     set('#cIn', j.cfg.entryTh); set('#cOut', j.cfg.exitTh); set('#cFb', j.cfg.feeB); set('#cFs', j.cfg.feeS);
   }
+  S.pos = j.pos || {};
   readCfg(); pilihTerbaik(); renderAll();
-  $('#srcStat').textContent = Object.keys(S.stocks).length + ' saham, diperbarui ' + fmtUpd(j.updated) + ' WIB';
+  const w = (j.menunggu || []).length;
+  $('#srcStat').textContent = Object.keys(S.stocks).length + ' saham' + (j.updated ? ', data diperbarui ' + fmtUpd(j.updated) + ' WIB' : '') + (w ? ' · menunggu data: ' + j.menunggu.join(', ') : '');
+  if (j.user) tampilUser(j.user);
+  tampil(true);
 }
-function kunciTombol(on){ ['#btnLoad', '#btnTambah', '#btnAnalisa'].forEach(id => { $(id).disabled = on; }); }
+function kunciTombol(on){ ['#btnLoad', '#btnTambah', '#btnSegarkan'].forEach(id => { $(id).disabled = on; }); }
 async function muatDariApi(){
   if (!apiSiap()) return;
   const st = $('#srcStat'), er = $('#srcErr');
   st.textContent = 'Memuat...'; kunciTombol(true);
   try {
     const j = await apiGet({});
-    if (!j.stocks || !j.stocks.length) throw new Error('Data kosong. Tambah saham dengan kolom di atas.');
-    try { localStorage.setItem('rs_tok', tokenAktif()); } catch (e) {}
     terapkanData(j);
+    if (!j.stocks.length && !(j.menunggu || []).length) st.textContent = 'Watchlist masih kosong. Tambah saham dengan kolom di atas, contoh: BBCA.';
   } catch (e) { st.textContent = ''; er.textContent = e.message; }
   kunciTombol(false);
 }
@@ -586,25 +658,30 @@ async function tambahSaham(){
   if (!apiSiap()) return;
   const ks = $('#kelolaStat'), er = $('#srcErr');
   if (!kode) { er.textContent = 'Tulis kode saham dulu, contoh: ANTM.'; return; }
-  ks.textContent = 'Mengambil data ' + kode + ' dan menganalisa (sekitar 10–30 detik)...'; kunciTombol(true);
+  ks.textContent = 'Menambahkan ' + kode + ' (bisa sampai 30 detik bila data belum pernah diambil)...'; kunciTombol(true);
   try {
     const j = await apiGet({action: 'tambah', kode});
-    masukkanSaham(j.stock);
-    try { localStorage.setItem('rs_tok', tokenAktif()); } catch (e) {}
-    S.sel = j.stock.kode; readCfg(); renderAll();
-    $('#newKode').value = '';
-    ks.textContent = kode + (j.baru ? ' ditambahkan ke watchlist.' : ' diperbarui.') + ' Tabel Rekap di Google Sheets ikut diperbarui pada analisa penuh berikutnya (jadwal 17.00).';
+    if (j.sudahAda) ks.textContent = kode + ' sudah ada di watchlist Anda.';
+    else {
+      masukkanSaham(j.stock);
+      S.sel = j.stock.kode; readCfg(); renderAll();
+      $('#newKode').value = '';
+      ks.textContent = kode + ' ditambahkan ke watchlist.';
+    }
   } catch (e) { ks.textContent = ''; er.textContent = e.message; }
   kunciTombol(false);
 }
-async function analisaUlangSemua(){
+async function segarkanData(){
   if (!apiSiap()) return;
   const ks = $('#kelolaStat'), er = $('#srcErr');
-  ks.textContent = 'Menganalisa ulang semua saham di Google Sheets. Ini bisa makan beberapa menit, jangan tutup halaman...'; kunciTombol(true);
+  ks.textContent = 'Memperbarui data harga saham Anda. Bisa makan beberapa menit, jangan tutup halaman...'; kunciTombol(true);
   try {
-    const j = await apiGet({action: 'analisa'});
-    if (!j.stocks || !j.stocks.length) throw new Error('Data kosong setelah analisa.');
-    terapkanData(j); ks.textContent = 'Analisa ulang selesai.';
+    const j = await apiGet({action: 'segarkan'});
+    const sel = S.sel; terapkanData(j); if (sel && S.stocks[sel]) { S.sel = sel; renderAll(); }
+    const r = j.segar || {ok: [], gagal: [], sisa: 0};
+    ks.textContent = r.ok.length ? 'Diperbarui: ' + r.ok.join(', ') + '.' : 'Semua data sudah terbaru hari ini.';
+    if (r.sisa) ks.textContent += ' ' + r.sisa + ' saham belum sempat, tekan lagi tombolnya.';
+    if (r.gagal.length) er.textContent = 'Gagal: ' + r.gagal.map(x => x.kode + ' (' + x.error + ')').join('; ');
   } catch (e) { ks.textContent = ''; er.textContent = e.message; }
   kunciTombol(false);
 }
@@ -612,16 +689,120 @@ async function hapusDiServer(kode){
   if (!apiSiap()) return false;
   const ks = $('#kelolaStat'), er = $('#srcErr');
   ks.textContent = 'Menghapus ' + kode + '...'; kunciTombol(true);
-  try { await apiGet({action: 'hapus', kode}); ks.textContent = kode + ' dihapus dari watchlist.'; kunciTombol(false); return true; }
+  try { await apiGet({action: 'hapus', kode}); delete S.pos[kode]; ks.textContent = kode + ' dihapus dari watchlist Anda.'; kunciTombol(false); return true; }
   catch (e) { ks.textContent = ''; er.textContent = e.message; kunciTombol(false); return false; }
 }
 $('#btnLoad').onclick = muatDariApi;
 $('#btnTambah').onclick = tambahSaham;
-$('#btnAnalisa').onclick = analisaUlangSemua;
+$('#btnSegarkan').onclick = segarkanData;
 $('#newKode').addEventListener('keydown', e => { if (e.key === 'Enter') tambahSaham(); });
-$('#tok').addEventListener('keydown', e => { if (e.key === 'Enter') muatDariApi(); });
 
-['#cCap','#cRisk','#cAtr','#cIn','#cOut','#cFb','#cFs'].forEach(id => $(id).addEventListener('input', () => { readCfg(); renderAll(); }));
+/* ===================== akun: masuk, daftar, keluar ===================== */
+function tampil(app){ $('#authView').hidden = app; $('#appView').hidden = !app; }
+function tampilUser(u){
+  SES.user = u;
+  $('#whoNama').textContent = u.nama; $('#whoEmail').textContent = u.email;
+  $('#whoPeran').textContent = u.peran === 'admin' ? 'admin' : 'pengguna';
+  $('#btnAdmin').hidden = u.peran !== 'admin';
+}
+function simpanSesi(t){ try { if (t) localStorage.setItem('rsm_tok', t); else localStorage.removeItem('rsm_tok'); } catch (e) {} }
+function keluarLokal(pesan){
+  SES.token = ''; SES.user = null; simpanSesi('');
+  S.stocks = {}; S.pos = {}; S.sel = null;
+  if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
+  $('#adminCard').hidden = true; $('#pwCard').hidden = true;
+  renderAll(); tampil(false);
+  $('#authErr').textContent = pesan || ''; $('#mSandi').value = ''; $('#dSandi').value = '';
+  $('#srcStat').textContent = ''; $('#kelolaStat').textContent = ''; $('#srcErr').textContent = '';
+}
+function authSiap(){
+  const er = $('#authErr'); er.textContent = '';
+  if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) { er.textContent = 'API_URL di file index.html belum diisi dengan URL Web App (lihat panduan).'; return false; }
+  return true;
+}
+async function prosesAuth(aksi, body, tombol){
+  if (!authSiap()) return;
+  const bt = $(tombol), t0 = bt.textContent; bt.disabled = true; bt.textContent = 'Memproses...';
+  try {
+    const j = await api(aksi, body);
+    SES.token = j.token; simpanSesi(j.token); tampilUser(j.user);
+    $('#mSandi').value = ''; $('#dSandi').value = ''; $('#authErr').textContent = '';
+    await muatDariApi();
+  } catch (e) { $('#authErr').textContent = e.message; }
+  bt.disabled = false; bt.textContent = t0;
+}
+$('#formMasuk').addEventListener('submit', e => { e.preventDefault(); prosesAuth('masuk', {email: $('#mEmail').value.trim(), sandi: $('#mSandi').value}, '#btnMasuk'); });
+$('#formDaftar').addEventListener('submit', e => {
+  e.preventDefault();
+  prosesAuth('daftar', {nama: $('#dNama').value.trim(), email: $('#dEmail').value.trim(), sandi: $('#dSandi').value, undangan: $('#dUndangan').value.trim()}, '#btnDaftar');
+});
+function tabAuth(masuk){
+  $('#formMasuk').hidden = !masuk; $('#formDaftar').hidden = masuk;
+  $('#tabMasuk').setAttribute('aria-pressed', masuk); $('#tabDaftar').setAttribute('aria-pressed', !masuk);
+  $('#authErr').textContent = '';
+}
+$('#tabMasuk').onclick = () => tabAuth(true); $('#tabDaftar').onclick = () => tabAuth(false);
+document.querySelectorAll('[data-eye]').forEach(b => b.onclick = () => { const i = $('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? 'Lihat' : 'Sembunyi'; });
+$('#btnKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
+
+$('#btnUbahSandi').onclick = () => { $('#pwCard').hidden = !$('#pwCard').hidden; $('#pwStat').textContent = ''; };
+$('#btnPwBatal').onclick = () => { $('#pwCard').hidden = true; };
+$('#btnPwSimpan').onclick = async () => {
+  const st = $('#pwStat'); st.textContent = 'Menyimpan...';
+  try { await api('ubahSandi', {lama: $('#pwLama').value, baru: $('#pwBaru').value}); st.textContent = 'Kata sandi diubah. Perangkat lain perlu masuk lagi.'; $('#pwLama').value = ''; $('#pwBaru').value = ''; }
+  catch (e) { st.textContent = e.message; }
+};
+
+/* ===================== panel admin ===================== */
+$('#btnAdmin').onclick = () => { const c = $('#adminCard'); c.hidden = !c.hidden; if (!c.hidden) muatAdmin(); };
+async function muatAdmin(){
+  const box = $('#adminBody'); box.innerHTML = '<p class="note">Memuat…</p>';
+  try { renderAdmin(await api('pengguna')); } catch (e) { box.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; }
+}
+function renderAdmin(j){
+  const me = SES.user ? SES.user.email : '';
+  const rows = j.pengguna.map(u => {
+    const self = u.email === me;
+    return `<tr><td>${esc(u.nama)}</td><td>${esc(u.email)}</td><td>${u.peran === 'admin' ? 'admin' : 'pengguna'}</td><td class="num">${u.saham}</td><td>${esc(u.login)}</td>
+      <td>${u.aktif ? '<span class="pos">aktif</span>' : '<span class="neg">nonaktif</span>'}</td>
+      <td style="white-space:nowrap"><button class="seg" data-ad="aktif" data-id="${esc(u.id)}" data-on="${u.aktif ? 0 : 1}" ${self ? 'disabled' : ''}>${u.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
+      <button class="seg" data-ad="reset" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Reset sandi</button>
+      <button class="seg danger" data-ad="hapus" data-id="${esc(u.id)}" ${self ? 'disabled' : ''}>Hapus</button></td></tr>`;
+  }).join('');
+  $('#adminBody').innerHTML = `
+    <p style="margin:0 0 8px">Kode undangan: ${j.undangan ? `<span class="code">${esc(j.undangan)}</span>` : '<b>(pendaftaran ditutup)</b>'}
+      <button class="seg" data-ad="undBaru">Buat kode baru</button>${j.undangan ? ' <button class="seg" data-ad="undTutup">Tutup pendaftaran</button>' : ''}</p>
+    <p class="note" style="margin-top:0">Pengguna ${j.pengguna.length}/${j.maksPengguna} · saham unik di sistem: ${j.kodeUnik}. Bagikan kode hanya ke orang yang Anda izinkan mendaftar.</p>
+    <div class="tblwrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th class="num">Saham</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="row" style="margin-top:10px"><button class="seg" data-ad="segarSemua">Perbarui data pasar semua saham</button><button class="seg" data-ad="muat">Muat ulang daftar</button></div>
+    <div class="note" id="adStat" style="margin-top:6px"></div>`;
+}
+$('#adminBody').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-ad]'); if (!b || b.disabled) return;
+  const a = b.dataset.ad, st = () => $('#adStat');
+  const pesan = t => { if (st()) st().textContent = t; };
+  try {
+    if (a === 'muat') return muatAdmin();
+    if (a === 'hapus' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Yakin hapus?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Hapus'; }, 4000); return; }
+    if (a === 'undBaru') { await api('undanganBaru'); return muatAdmin(); }
+    if (a === 'undTutup') { await api('undanganTutup'); return muatAdmin(); }
+    if (a === 'aktif') { await api('setAktif', {id: b.dataset.id, aktif: b.dataset.on === '1'}); return muatAdmin(); }
+    if (a === 'hapus') { await api('hapusPengguna', {id: b.dataset.id}); return muatAdmin(); }
+    if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara + ' (sampaikan ke yang bersangkutan; minta segera diganti).'); return; }
+    if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); pesan('Selesai: ' + j.segar.ok.length + ' berhasil, ' + j.segar.gagal.length + ' gagal, ' + j.segar.sisa + ' belum sempat (tekan lagi).'); }
+  } catch (err) { pesan(err.message); }
+});
+
+let tCfg;
+function simpanCfgServer(){
+  if (!SES.token) return;
+  clearTimeout(tCfg);
+  tCfg = setTimeout(async () => {
+    try { await api('simpanCfg', {cap: +$('#cCap').value, riskPct: +$('#cRisk').value, atrMult: +$('#cAtr').value, entryTh: +$('#cIn').value, exitTh: +$('#cOut').value, feeB: +$('#cFb').value, feeS: +$('#cFs').value}); $('#srcErr').textContent = ''; }
+    catch (e) { $('#srcErr').textContent = 'Pengaturan belum tersimpan: ' + e.message; }
+  }, 900);
+}
+['#cCap','#cRisk','#cAtr','#cIn','#cOut','#cFb','#cFs'].forEach(id => $(id).addEventListener('input', () => { readCfg(); renderAll(); simpanCfgServer(); }));
 
 /* ===================== UI: render ===================== */
 function renderAll(){
@@ -629,7 +810,7 @@ function renderAll(){
   $('#wlCard').hidden = !names.length;
   $('#detail').hidden = !names.length;
   $('#count').textContent = names.length ? names.length + ' saham di watchlist' : '';
-  if (!names.length) return;
+  if (!names.length) { $('#pgCard').hidden = true; return; }
   renderWatch(); renderPeluang(); renderDetail();
 }
 function meterHTML(v){
@@ -883,8 +1064,14 @@ function pasarBuka(){
   if (dow < 1 || dow > 5) return false;
   return m >= 9 * 60 && m <= 16 * 60 + 5;
 }
-function posGet(k){ try { return (JSON.parse(localStorage.getItem('rs_pos') || '{}'))[k] || null; } catch (e) { return null; } }
-function posSet(k, v){ try { const o = JSON.parse(localStorage.getItem('rs_pos') || '{}'); if (v) o[k] = v; else delete o[k]; localStorage.setItem('rs_pos', JSON.stringify(o)); } catch (e) {} }
+function posGet(k){ return S.pos[k] || null; }
+function posSet(k, v){
+  if (v) S.pos[k] = v; else delete S.pos[k];
+  const st = S.stocks[k]; if (!st || st.src !== 'api' || !SES.token) return;
+  const gagal = e => { const n = $('#lvNote'); if (n) { n.dataset.keep = '1'; n.textContent = 'Posisi belum tersimpan di server: ' + e.message; } };
+  if (!v) api('hapusPosisi', {kode: k}).catch(gagal);
+  else if (v.e > 0 && v.lots > 0) api('simpanPosisi', Object.assign({kode: k}, v)).catch(gagal);
+}
 function posLevels(st, pos){
   const n = st.d.c.length - 1, a = st.I.atr[n], e = pos.e;
   const stop = pos.stop > 0 ? pos.stop : (a != null ? tDown(Math.max(e - S.cfg.atrMult * a, tick(e))) : null);
@@ -1243,7 +1430,10 @@ window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() =
   b.onclick = () => { pasang(root.dataset.theme === 'dark' ? 'light' : 'dark'); const k = $('#tvbox'); if (k) { k.dataset.k = ''; } if (S.sel) renderDetail(); };
 })();
 readCfg();
-try { const t0 = localStorage.getItem('rs_tok'); if (t0) { $('#tok').value = t0; muatDariApi(); } } catch (e) {}
+try {
+  const t0 = localStorage.getItem('rsm_tok');
+  if (t0 && API_URL.indexOf('GANTI_DENGAN') !== 0) { SES.token = t0; $('#authStat').textContent = 'Memulihkan sesi...'; muatDariApi().then(() => { $('#authStat').textContent = ''; if ($('#appView').hidden && !$('#authErr').textContent) $('#authErr').textContent = $('#srcErr').textContent || ''; }); }
+} catch (e) {}
 </script>
 </body>
 </html>
