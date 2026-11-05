@@ -89,14 +89,19 @@ tr.sel{background:var(--bg)}
 .chk{flex-direction:row;align-items:center;gap:6px}
 #tvbox{height:520px;margin-top:8px}
 .why{white-space:normal;min-width:200px;color:var(--ink2)}
-.mongrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:8px 0}
+.mongrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:8px 0}
 .mon{background:var(--bg);border:1px solid var(--line);border-left-width:5px;border-radius:8px;padding:10px;cursor:pointer}
 .mon.good{border-left-color:var(--good)}.mon.bad{border-left-color:var(--bad)}.mon.warn{border-left-color:var(--warn)}
 .mon.sel{outline:2px solid var(--s1)}
 .mon .mh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
 .mon .mh b{font-size:17px}
-.mon .mp{font-size:20px;font-variant-numeric:tabular-nums}
-.mon svg{width:100%;height:auto;display:block;margin:6px 0}
+.mon .mp{font-variant-numeric:tabular-nums}
+.mon svg{width:100%;height:84px;display:block;margin:6px 0}
+.mon .mf{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.mon .mf input{width:84px;padding:5px 6px;font-size:13px}
+.mon .mf button{padding:5px 10px;font-size:13px}
+.mon .mh b{font-size:16px}
+.mon .mp{font-size:17px}
 .mon .ml{font-size:13px;color:var(--ink2);display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
 .tile{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
@@ -235,14 +240,14 @@ tr.sel{background:var(--bg)}
   </div>
 
   <div class="card" id="monCard" hidden>
-    <h3>Pantauan semua posisi saya</h3>
+    <h3>Pantauan saham &amp; posisi saya</h3>
     <div id="monSum"></div>
     <div id="monGrid" class="mongrid"></div>
     <div class="row" style="margin-top:8px;gap:8px;align-items:center;flex-wrap:wrap">
       <button id="monNow">Perbarui semua harga</button>
       <span class="note" id="monNote" style="margin:0"></span>
     </div>
-    <p class="note">Posisi diisi di kartu "Harga terkini &amp; posisi saya" tiap saham (pilih saham di tabel, isi harga beli &amp; lot). Setelah terisi, saham itu otomatis tampil di sini. Klik kartu untuk membuka detailnya.</p>
+    <p class="note">Semua saham watchlist tampil di sini (harga ikut diperbarui bila watchlist 6 saham atau kurang; jika lebih, hanya saham berposisi). Isi harga beli &amp; lot di kotak saham untuk memantau untung/rugi. Klik kotak untuk membuka detail &amp; grafik besar.</p>
   </div>
 
   <div class="card" id="pgCard" hidden>
@@ -1247,70 +1252,81 @@ function renderLiveInfo(){
 
 /* ===================== pantauan banyak posisi ===================== */
 function kodePantau(){
-  const set = [];
-  if (S.sel && S.stocks[S.sel] && S.stocks[S.sel].src === 'api') set.push(S.sel);
-  Object.keys(S.pos || {}).forEach(k => { const st = S.stocks[k]; if (st && st.src === 'api' && posValid(S.pos[k]) && set.indexOf(k) < 0) set.push(k); });
+  const api = k => S.stocks[k] && S.stocks[k].src === 'api';
+  const semua = Object.keys(S.stocks).filter(api), set = [];
+  if (S.sel && api(S.sel)) set.push(S.sel);
+  semua.forEach(k => { if ((semua.length <= 6 || posValid(S.pos && S.pos[k])) && set.indexOf(k) < 0) set.push(k); });
   return set;
 }
 function miniChart(view, lv, price){
-  const d = view.d, n = d.c.length, from = Math.max(0, n - 45), W = 300, H = 110, pad = 4;
+  const d = view.d, n = d.c.length, from = Math.max(0, n - 40), W = 240, H = 84, pad = 3;
   let lo = Infinity, hi = -Infinity;
   for (let i = from; i < n; i++) { lo = Math.min(lo, d.l[i]); hi = Math.max(hi, d.h[i]); }
-  const dekat = x => x > 0 && Math.abs(x / price - 1) <= 0.12;
-  const ys = [price, lv && lv.e, lv && lv.stop, lv && lv.tp].filter(dekat);
-  ys.forEach(y => { lo = Math.min(lo, y); hi = Math.max(hi, y); });
+  const dekat = x => x > 0 && Math.abs(x / price - 1) <= 0.08;
+  [price, lv && lv.e, lv && lv.stop, lv && lv.tp].filter(dekat).forEach(y => { lo = Math.min(lo, y); hi = Math.max(hi, y); });
   const span = (hi - lo) || 1, Y = v => pad + (hi - v) / span * (H - 2 * pad);
-  const cnt = n - from, step = (W - 2 * pad) / cnt, bw = Math.max(1.5, step * 0.6);
+  const cnt = n - from, step = (W - 2 * pad) / cnt, bw = Math.max(1.5, step * 0.62);
   let g = '';
   for (let i = from; i < n; i++) {
-    const x = pad + (i - from + 0.5) * step, up = d.c[i] >= d.o[i], col = up ? 'var(--good)' : 'var(--bad)';
+    const x = pad + (i - from + 0.5) * step, col = d.c[i] >= d.o[i] ? 'var(--good)' : 'var(--bad)';
     const yo = Y(d.o[i]), yc = Y(d.c[i]);
-    g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${Y(d.h[i]).toFixed(1)}" y2="${Y(d.l[i]).toFixed(1)}" stroke="${col}" stroke-width="1"/>`
+    g += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${Y(d.h[i]).toFixed(1)}" y2="${Y(d.l[i]).toFixed(1)}" stroke="${col}" stroke-width="1" vector-effect="non-scaling-stroke"/>`
       + `<rect x="${(x - bw / 2).toFixed(1)}" y="${Math.min(yo, yc).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Math.abs(yo - yc)).toFixed(1)}" fill="${col}"/>`;
   }
-  const ln = (v, col, dash, t) => v >= lo && v <= hi ? `<line x1="0" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${col}" stroke-width="1" ${dash ? 'stroke-dasharray="4 3"' : ''}/><text x="${W - 2}" y="${(Y(v) - 2).toFixed(1)}" text-anchor="end" font-size="9" fill="${col}">${t} ${fmtP(v)}</text>` : '';
-  if (lv) g += ln(lv.e, 'var(--s1)', true, 'Beli') + ln(lv.stop, 'var(--bad)', true, 'Stop') + ln(lv.tp, 'var(--good)', true, 'Target');
-  g += ln(price, 'var(--ink)', false, '');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafik mini ${esc(view.name)}">${g}</svg>`;
+  const ln = (v, col, dash) => v >= lo && v <= hi ? `<line x1="0" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${col}" stroke-width="1.2" ${dash ? 'stroke-dasharray="5 3"' : ''} vector-effect="non-scaling-stroke"/>` : '';
+  if (lv) g += ln(lv.e, 'var(--s1)', true) + ln(lv.stop, 'var(--bad)', true) + ln(lv.tp, 'var(--good)', true);
+  g += ln(price, 'var(--ink)', false);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Grafik mini ${esc(view.name)}">${g}</svg>`;
 }
 function renderMon(){
   const card = $('#monCard'); if (!card) return;
-  const ks = Object.keys(S.pos || {}).filter(k => S.stocks[k] && posValid(S.pos[k]));
-  card.hidden = !ks.length;
-  if (!ks.length) return;
-  let totNet = 0, totCost = 0, nHarga = 0, h = '';
-  ks.forEach(k => {
-    const st = S.stocks[k], pos = S.pos[k], L = LIVE.data[k], lv = posLevels(st, pos);
-    const sh = pos.lots * 100, cost = pos.e * sh;
-    totCost += cost;
-    if (!L) {
-      h += `<div class="mon" data-k="${esc(k)}"><div class="mh"><b>${esc(k)}</b><span class="note">Mengambil harga…</span></div>${miniChart(st, lv, st.d.c[st.d.c.length - 1])}<div class="ml"><span>Beli ${fmtP(pos.e)} × ${pos.lots} lot</span></div></div>`;
-      return;
+  const names = Object.keys(S.stocks);
+  card.hidden = !names.length;
+  if (!names.length) return;
+  const punya = k => S.pos && posValid(S.pos[k]);
+  names.sort((a, b) => (punya(b) ? 1 : 0) - (punya(a) ? 1 : 0));
+  let totNet = 0, totCost = 0, nPos = 0, nHarga = 0, h = '';
+  names.forEach(k => {
+    const st = S.stocks[k], L = LIVE.data[k], n = st.d.c.length - 1;
+    const price = L ? L.price : st.d.c[n], prev = L ? L.prev : (n > 0 ? st.d.c[n - 1] : null);
+    const chg = prev ? price / prev - 1 : null, view = (L && liveView(st)) || st;
+    const head = (lbl, cls) => `<div class="mh"><b>${esc(k)}</b><span class="mp">${fmtP(price)}</span>${chg != null ? `<span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)}</span>` : ''}${lbl ? `<span class="pill">${lbl}</span>` : ''}</div>`;
+    if (punya(k)) {
+      const pos = S.pos[k], lv = posLevels(st, pos), sh = pos.lots * 100, cost = pos.e * sh;
+      const net = (price - pos.e) * sh - cost * S.cfg.feeB - price * sh * S.cfg.feeS;
+      totCost += cost; totNet += net; nPos++; if (L) nHarga++;
+      const s = statusPos(price, lv);
+      const lbl = {stop: '⛔ Kena stop', target: '🎯 Target', near: '⚠ Dekat stop', neart: '⚠ Dekat target', ok: '✔ Aman'}[s.code];
+      h += `<div class="mon ${s.cls} ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(lbl)}${miniChart(view, lv, price)}
+        <div class="ml"><span>Untung/rugi</span><b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}Rp ${fmtP(Math.abs(net))} (${fmtPct(net / cost, 2)})</b></div>
+        <div class="ml"><span>Beli ${fmtP(pos.e)} × ${pos.lots} lot</span><span>Stop ${lv.stop ? fmtP(lv.stop) : '–'}</span></div></div>`;
+    } else {
+      const sc = lastScore(st), v = sc ? verdict(sc.total) : null;
+      h += `<div class="mon ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(v ? `<i>${v.ic}</i> ${v.t}` : '')}${miniChart(view, null, price)}
+        <div class="ml"><span>Belum ada posisi</span>${sc ? `<span>Skor ${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</span>` : ''}</div>
+        <div class="mf" data-f="${esc(k)}"><input type="number" min="0" step="1" placeholder="Harga beli" aria-label="Harga beli ${esc(k)}"><input type="number" min="1" step="1" placeholder="Lot" style="width:56px" aria-label="Lot ${esc(k)}"><button type="button">Simpan posisi</button></div></div>`;
     }
-    nHarga++;
-    const net = (L.price - pos.e) * sh - cost * S.cfg.feeB - L.price * sh * S.cfg.feeS;
-    totNet += net;
-    const s = statusPos(L.price, lv), chg = L.prev ? L.price / L.prev - 1 : null, view = liveView(st) || st;
-    const lbl = {stop: '⛔ Kena stop', target: '🎯 Target tercapai', near: '⚠ Dekat stop', neart: '⚠ Dekat target', ok: '✔ Aman'}[s.code];
-    h += `<div class="mon ${s.cls} ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">
-      <div class="mh"><b>${esc(k)}</b><span class="mp">${fmtP(L.price)}</span>${chg != null ? `<span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)}</span>` : ''}<span class="pill">${lbl}</span></div>
-      ${miniChart(view, lv, L.price)}
-      <div class="ml"><span>Untung/rugi bersih</span><b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}Rp ${fmtP(Math.abs(net))} (${fmtPct(net / cost, 2)})</b></div>
-      <div class="ml"><span>Beli ${fmtP(pos.e)} × ${pos.lots} lot</span><span>Stop ${lv.stop ? fmtP(lv.stop) : '–'} · Target ${lv.tp ? fmtP(lv.tp) : '–'}</span></div>
-    </div>`;
   });
   $('#monGrid').innerHTML = h;
-  $('#monSum').innerHTML = `<div class="tiles">
-    <div class="tile"><span>Jumlah posisi</span><b>${ks.length}</b></div>
+  $('#monSum').innerHTML = nPos ? `<div class="tiles">
+    <div class="tile"><span>Jumlah posisi</span><b>${nPos}</b></div>
     <div class="tile"><span>Modal dipakai</span><b>Rp ${fmtP(totCost)}</b></div>
-    <div class="tile"><span>Total untung/rugi bersih</span><b class="${totNet >= 0 ? 'pos' : 'neg'}">${nHarga ? (totNet >= 0 ? '+' : '−') + 'Rp ' + fmtP(Math.abs(totNet)) + ' (' + fmtPct(totNet / totCost, 2) + ')' : '–'}</b></div></div>`;
+    <div class="tile"><span>Total untung/rugi bersih</span><b class="${totNet >= 0 ? 'pos' : 'neg'}">${nHarga ? (totNet >= 0 ? '+' : '−') + 'Rp ' + fmtP(Math.abs(totNet)) + ' (' + fmtPct(totNet / totCost, 2) + ')' : '–'}</b></div></div>` : '<p class="note" style="margin:0 0 6px">Belum ada posisi. Isi harga beli &amp; lot di kotak saham di bawah untuk mulai memantau untung/rugi.</p>';
   $('#monGrid').querySelectorAll('.mon').forEach(el => {
-    const buka = () => { S.sel = el.dataset.k; renderAll(); segarkanLive(false); window.scrollTo({top: $('#detail').offsetTop - 10, behavior: 'smooth'}); };
-    el.onclick = buka; el.onkeydown = e => { if (e.key === 'Enter') buka(); };
+    const buka = () => { S.sel = el.dataset.k; renderAll(); segarkanLive(false); const d = $('#detail'); if (d) window.scrollTo({top: d.offsetTop - 10, behavior: 'smooth'}); };
+    el.onclick = buka; el.onkeydown = e => { if (e.key === 'Enter' && e.target === el) buka(); };
+  });
+  $('#monGrid').querySelectorAll('.mf').forEach(f => {
+    f.onclick = e => e.stopPropagation(); f.onkeydown = e => e.stopPropagation();
+    f.querySelector('button').onclick = () => {
+      const k = f.dataset.f, ins = f.querySelectorAll('input'), e = +ins[0].value, lots = +ins[1].value;
+      if (!(e > 0 && lots >= 1)) { ins[0].focus(); return; }
+      posSet(k, {e, lots: Math.floor(lots), stop: 0, tp: 0});
+      LIVE.data[k] && delete LIVE.data[k].fetched; renderMon(); if (S.sel === k) renderAll(); ambilLive(true);
+    };
   });
   const nt = $('#monNote'); if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto && pasarBuka() ? `Otomatis diperbarui tiap ${LIVE.sec / 60} menit selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui semua harga" bila perlu.';
 }
-
 function redrawLive(){
   const st = S.stocks[S.sel]; if (!st || !LAST_BT) return;
   drawCharts(liveView(st) || st, LAST_BT);
