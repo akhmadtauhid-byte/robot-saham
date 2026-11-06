@@ -274,6 +274,34 @@ tr.sel{background:var(--bg)}
     <p class="note">Semua saham watchlist tampil di sini (harga ikut diperbarui bila watchlist 6 saham atau kurang; jika lebih, hanya saham berposisi). Isi harga beli &amp; lot di kotak saham untuk memantau untung/rugi. Klik kotak untuk membuka detail &amp; grafik besar.</p>
   </div>
 
+  <div class="card" id="jrCard" hidden>
+    <h3>Jurnal trading &amp; rapor akurasi</h3>
+    <p class="note" style="margin-top:0">Catat setiap pembelian di sini beserta daftar periksa. Setelah posisi ditutup, sistem menghitung seberapa sering sinyal robot dan disiplin Anda benar-benar menghasilkan untung. Posisi yang dicatat otomatis muncul di kartu pantauan dan notifikasi Telegram.</p>
+    <details id="jrForm">
+      <summary><b>Catat pembelian baru</b> (dengan daftar periksa)</summary>
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px">
+        <label>Saham <select id="jrKode"></select></label>
+        <label>Harga beli <input type="number" id="jrE" min="1" step="1" inputmode="numeric" style="width:110px"></label>
+        <label>Lot <input type="number" id="jrLot" min="1" step="1" inputmode="numeric" style="width:80px"></label>
+        <label>Stop <input type="number" id="jrStop" min="1" step="1" inputmode="numeric" style="width:110px"></label>
+        <label>Target <input type="number" id="jrTp" min="1" step="1" inputmode="numeric" style="width:110px"></label>
+        <label>Tanggal beli <input type="date" id="jrTgl"></label>
+      </div>
+      <label style="display:block;margin-top:8px">Alasan membeli (opsional, maks. 300 huruf) <input type="text" id="jrAlasan" maxlength="300" style="width:100%" placeholder="contoh: menembus tertinggi 20 hari, volume naik"></label>
+      <h4 style="margin:12px 0 4px">Daftar periksa sebelum beli</h4>
+      <div id="jrAuto"></div>
+      <label style="display:block;margin:4px 0"><input type="checkbox" id="jrMan1"> Saya sudah membaca berita dan pengumuman saham ini (dividen, stock split, suspensi, laporan keuangan).</label>
+      <label style="display:block;margin:4px 0"><input type="checkbox" id="jrMan2"> Saya siap menerima kerugian sebesar angka risiko di atas bila stop kena.</label>
+      <div id="jrRingkas" class="note" style="margin:8px 0"></div>
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap"><button class="primary" id="jrSimpan">Catat pembelian</button><span class="note" id="jrMsg" style="margin:0"></span></div>
+    </details>
+    <h4 style="margin:14px 0 4px">Posisi terbuka</h4>
+    <div id="jrOpen"></div>
+    <h4 style="margin:14px 0 4px">Rapor akurasi</h4>
+    <div id="jrRapor"></div>
+    <details style="margin-top:10px"><summary>Riwayat transaksi tertutup</summary><div id="jrHist" style="overflow-x:auto"></div></details>
+  </div>
+
   <div class="card" id="pgCard" hidden>
     <h3>Pemindai potensi naik (volume &amp; momentum harga)</h3>
     <p class="note" style="margin-top:0">Memeriksa semua saham di watchlist: apakah volume melonjak saat harga naik, harga menembus / mendekati level tertinggi 20 hari, dan tren mendukung. Klik baris untuk melihat grafiknya. Ini penyaring awal, bukan jaminan harga naik.</p>
@@ -690,6 +718,7 @@ function terapkanData(j){
   if (j.user) tampilUser(j.user);
   tampil(true);
   if (!PASAR.loaded) muatPasar();
+  muatJurnal();
 }
 function kunciTombol(on){ ['#btnLoad', '#btnTambah', '#btnSegarkan'].forEach(id => { $(id).disabled = on; }); }
 async function muatDariApi(){
@@ -760,7 +789,7 @@ function keluarLokal(pesan){
   SES.token = ''; SES.user = null; simpanSesi('');
   S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = '';
   if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
-  $('#adminCard').hidden = true; $('#pwCard').hidden = true; $('#notifCard').hidden = true; notifBerhenti();
+  $('#adminCard').hidden = true; $('#pwCard').hidden = true; $('#notifCard').hidden = true; notifBerhenti(); S.jurnal = []; JR.sigOpen = ''; JR.tutupId = null; $('#jrCard').hidden = true;
   renderAll(); tampil(false);
   $('#authErr').textContent = pesan || ''; $('#mSandi').value = ''; $('#dSandi').value = '';
   $('#srcStat').textContent = ''; $('#kelolaStat').textContent = ''; $('#srcErr').textContent = '';
@@ -859,6 +888,184 @@ function notifMulaiCek(){
 }
 $('#btnNotif').onclick = () => { const c = $('#notifCard'); c.hidden = !c.hidden; if (!c.hidden) muatNotif(); else notifBerhenti(); };
 
+/* ===================== JURNAL TRADING, DAFTAR PERIKSA, RAPOR AKURASI ===================== */
+const JR = {tutupId: null, sigOpen: '', sigKode: ''};
+S.jurnal = [];
+const rpS = n => (n < 0 ? '-' : n > 0 ? '+' : '') + 'Rp ' + fmtP(Math.abs(Math.round(n)));
+const ALASAN_TXT = {stop: 'Kena stop', target: 'Capai target', sinyal: 'Sinyal jual robot', manual: 'Keputusan sendiri / emosi', lain: 'Lainnya'};
+async function muatJurnal(){
+  if (!SES.token || !API_URL || API_URL.indexOf('GANTI_DENGAN') === 0) return;
+  try { const r = await api('jurnalDaftar'); S.jurnal = r.jurnal || []; renderJurnal(); } catch (e) {}
+}
+function jrNilai(id){ return Number($(id).value) || 0; }
+// Daftar periksa. ok: true = terpenuhi, false = belum, null = tidak bisa dicek (data belum ada).
+function jrCek(){
+  const k = $('#jrKode').value, st = S.stocks[k], cfg = S.cfg;
+  const e = jrNilai('#jrE'), lots = Math.floor(jrNilai('#jrLot')), stop = jrNilai('#jrStop');
+  const items = [];
+  const lengkap = e > 0 && lots > 0;
+  const stopOk = stop > 0 && e > 0 && stop < e;
+  items.push({t: 'Stop sudah ditentukan dan di bawah harga beli', ok: stopOk, d: stopOk ? 'Stop ' + fmtP(stop) : 'Isi harga stop di bawah harga beli.'});
+  const nilaiBeli = e * lots * 100;
+  const rugi = stopOk && lengkap ? (e - stop) * lots * 100 + nilaiBeli * (cfg.feeB || 0) + stop * lots * 100 * (cfg.feeS || 0) : null;
+  const batas = (cfg.cap || 0) * (cfg.riskPct || 0) / 100;
+  S._jrRugi = rugi;
+  items.push({t: 'Risiko tidak melebihi batas (' + (cfg.riskPct || 0) + '% dari modal)', ok: rugi == null ? false : (batas > 0 ? rugi <= batas : false),
+    d: rugi == null ? 'Isi harga beli, lot, dan stop.' : 'Bila stop kena, rugi sekitar Rp ' + fmtP(rugi) + ' (batas Rp ' + fmtP(batas) + ').'});
+  const biaya = nilaiBeli * (1 + (cfg.feeB || 0));
+  items.push({t: 'Uang cukup (tidak melebihi modal)', ok: lengkap && cfg.cap > 0 ? biaya <= cfg.cap : false,
+    d: lengkap ? 'Dana terpakai Rp ' + fmtP(biaya) + ' dari modal Rp ' + fmtP(cfg.cap) + '.' : 'Isi harga beli dan lot.'});
+  const sc = st ? lastScore(st) : null, th = isFinite(cfg.entryTh) ? cfg.entryTh : 25;
+  items.push({t: 'Sinyal robot mendukung beli (skor ≥ ' + th + ')', ok: sc ? sc.total >= th : null, d: sc ? 'Skor ' + (sc.total >= 0 ? '+' : '') + Math.round(sc.total) + ' (' + verdict(sc.total).t + ').' : 'Data saham belum ada.'});
+  const K = kondisiPasar();
+  items.push({t: 'Pasar tidak sedang lemah', ok: K ? K.level !== 'lemah' : null, d: K ? K.t + '.' : 'Data pasar belum dimuat (buka kartu Kondisi pasar).'});
+  const pe = st ? peluang(st) : null;
+  items.push({t: 'Saham cukup likuid (nilai transaksi harian ≥ Rp 1 miliar)', ok: pe ? pe.avgVal >= 1e9 : null, d: pe ? 'Rata-rata 20 hari sekitar Rp ' + fmtP(pe.avgVal / 1e6) + ' juta per hari.' : 'Data belum cukup.'});
+  items.push({t: 'Sudah membaca berita dan pengumuman saham', ok: $('#jrMan1').checked, d: ''});
+  items.push({t: 'Siap menerima kerugian bila stop kena', ok: $('#jrMan2').checked, d: ''});
+  return items;
+}
+function jrRenderCek(){
+  if (!$('#jrCard') || $('#jrCard').hidden) return;
+  const it = jrCek(), auto = it.slice(0, 6), lulus = it.filter(x => x.ok === true).length;
+  $('#jrAuto').innerHTML = auto.map(x => {
+    const ic = x.ok === true ? '✅' : x.ok === false ? '⚠️' : '❔', lb = x.ok === true ? 'Terpenuhi' : x.ok === false ? 'Belum' : 'Tidak bisa dicek';
+    return `<div style="margin:3px 0"><span aria-hidden="true">${ic}</span> <b>${esc(x.t)}</b> <span class="note" style="margin:0">— ${lb}. ${esc(x.d)}</span></div>`;
+  }).join('');
+  const kurang = it.length - lulus;
+  $('#jrRingkas').innerHTML = `<b>${lulus} dari ${it.length}</b> item terpenuhi.` + (kurang ? ' Item yang belum terpenuhi sebaiknya dibereskan dulu, atau pastikan Anda tahu alasannya.' : ' Semua siap.') + (S._jrRugi != null ? ' Risiko bila stop kena: <b>Rp ' + fmtP(S._jrRugi) + '</b>.' : '');
+}
+function jrIsiKode(){
+  const names = Object.keys(S.stocks).sort(), sig = names.join(',');
+  if (sig === JR.sigKode) return;
+  const cur = $('#jrKode').value; JR.sigKode = sig;
+  $('#jrKode').innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  if (names.indexOf(cur) >= 0) $('#jrKode').value = cur;
+}
+function jrSaran(){
+  const k = $('#jrKode').value, st = S.stocks[k]; if (!st) return;
+  const n = st.d.c.length - 1, pl = plan(st.d, st.I, S.cfg);
+  $('#jrE').value = pl ? pl.e : st.d.c[n];
+  $('#jrLot').value = pl ? pl.lots : 1;
+  $('#jrStop').value = pl ? pl.stop : '';
+  $('#jrTp').value = pl ? pl.t1 : '';
+  jrRenderCek();
+}
+function jrHarga(k){ const st = S.stocks[k]; return st ? st.d.c[st.d.c.length - 1] : null; }
+function jrJmlCek(x){ const c = x.cek || ''; return {lulus: (c.match(/1/g) || []).length, total: c.length}; }
+function renderJurnal(){
+  const card = $('#jrCard'); if (!card) return;
+  card.hidden = !SES.token || !Object.keys(S.stocks).length;
+  if (card.hidden) return;
+  jrIsiKode();
+  const buka = S.jurnal.filter(x => x.status === 'buka'), tutup = S.jurnal.filter(x => x.status === 'tutup');
+  const sig = JSON.stringify([S.jurnal, JR.tutupId, buka.map(x => jrHarga(x.kode))]);
+  if (sig !== JR.sigOpen) {
+    JR.sigOpen = sig;
+    $('#jrOpen').innerHTML = !buka.length ? '<p class="note" style="margin:0">Belum ada posisi terbuka di jurnal.</p>' : buka.map(x => {
+      const h = jrHarga(x.kode), cfg = S.cfg;
+      const nb = x.e * x.lots * 100, net = h != null ? (h - x.e) * x.lots * 100 - nb * (cfg.feeB || 0) - h * x.lots * 100 * (cfg.feeS || 0) : null;
+      const jc = jrJmlCek(x);
+      let f = '';
+      if (JR.tutupId === x.id) f = `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:end;margin-top:6px">
+        <label>Harga jual <input type="number" data-jr="jual" min="1" step="1" inputmode="numeric" style="width:110px" value="${h != null ? Math.round(h) : ''}"></label>
+        <label>Alasan keluar <select data-jr="keluar">${Object.keys(ALASAN_TXT).map(a => `<option value="${a}">${ALASAN_TXT[a]}</option>`).join('')}</select></label>
+        <label>Tanggal jual <input type="date" data-jr="tgl" value="${wibNow().toISOString().slice(0, 10)}"></label>
+        <button class="primary" data-jr-aksi="simpan-tutup" data-id="${esc(x.id)}">Simpan penjualan</button>
+        <button data-jr-aksi="batal">Batal</button></div>`;
+      return `<div class="tile" style="margin:6px 0"><div class="head"><span class="kodebadge">${esc(x.kode)}</span> <span class="note" style="margin:0">dibeli ${esc(x.tglBeli)} · ${x.lots} lot @ ${fmtP(x.e)} · stop ${x.stop ? fmtP(x.stop) : '–'} · target ${x.tp ? fmtP(x.tp) : '–'} · daftar periksa ${jc.total ? jc.lulus + '/' + jc.total : '–'}</span></div>
+        <div>${net != null ? 'Harga data terakhir ' + fmtP(h) + ' → <b class="' + (net >= 0 ? 'pos' : 'neg') + '">' + rpS(net) + '</b> (belum dijual, sudah termasuk biaya)' : ''}</div>
+        ${x.alasan ? '<div class="note" style="margin:2px 0">Alasan: ' + esc(x.alasan) + '</div>' : ''}
+        ${f || `<button data-jr-aksi="tutup" data-id="${esc(x.id)}" style="margin-top:6px">Tutup posisi (sudah dijual)</button>`}</div>`;
+    }).join('');
+    $('#jrHist').innerHTML = !tutup.length ? '<p class="note">Belum ada transaksi tertutup.</p>' :
+      `<table><thead><tr><th>Saham</th><th>Beli</th><th>Jual</th><th>Hasil bersih</th><th>%</th><th>Alasan keluar</th><th>Periksa</th><th></th></tr></thead><tbody>` +
+      tutup.map(x => { const jc = jrJmlCek(x); return `<tr><td><b>${esc(x.kode)}</b></td><td>${esc(x.tglBeli)}<br>${x.lots} lot @ ${fmtP(x.e)}</td><td>${esc(x.tglJual)}<br>@ ${fmtP(x.jual)}</td><td class="${x.hasil >= 0 ? 'pos' : 'neg'}">${rpS(x.hasil)}</td><td class="${x.hasil >= 0 ? 'pos' : 'neg'}">${fmtP(x.hasilPct, 2)}%</td><td>${esc(ALASAN_TXT[x.keluar] || x.keluar)}</td><td>${jc.total ? jc.lulus + '/' + jc.total : '–'}</td><td><button data-jr-aksi="hapus" data-id="${esc(x.id)}" aria-label="Hapus transaksi ${esc(x.kode)}">×</button></td></tr>`; }).join('') + '</tbody></table>';
+  }
+  $('#jrRapor').innerHTML = jrRaporHTML(tutup);
+  jrRenderCek();
+}
+const rata = a => a.length ? a.reduce((p, c) => p + c, 0) / a.length : null;
+function jrStat(t){
+  const n = t.length, m = t.filter(x => x.hasil > 0), r = t.filter(x => x.hasil < 0);
+  const sumM = m.reduce((p, c) => p + c.hasil, 0), sumR = r.reduce((p, c) => p + c.hasil, 0);
+  const aw = rata(m.map(x => x.hasilPct)), al = rata(r.map(x => Math.abs(x.hasilPct)));
+  return {n, menang: m.length, kalah: r.length, wr: n ? m.length / n : null, aw, al, total: sumM + sumR, ekspektasi: n ? (sumM + sumR) / n : null,
+    pf: sumR < 0 ? sumM / Math.abs(sumR) : null, impas: aw != null && al != null ? al / (aw + al) : null};
+}
+function jrRaporHTML(t){
+  if (!t.length) return '<p class="note" style="margin:0">Belum ada transaksi tertutup. Rapor muncul setelah Anda menutup posisi pertama.</p>';
+  const A = jrStat(t), th = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25;
+  const pc = x => x == null ? '–' : (x * 100).toFixed(0) + '%';
+  let h = '';
+  if (A.n < 20) h += `<p class="note" style="margin:0 0 6px">⚠️ Baru ${A.n} transaksi tertutup. Dengan data sesedikit ini, angka di bawah belum bisa disimpulkan. Kumpulkan minimal 20 transaksi.</p>`;
+  h += `<div class="tiles">
+    <div class="tile"><span>Transaksi tertutup</span><b>${A.n}</b></div>
+    <div class="tile"><span>Menang / kalah</span><b>${A.menang} / ${A.kalah}</b></div>
+    <div class="tile"><span>Persentase menang</span><b>${pc(A.wr)}</b></div>
+    <div class="tile"><span>Rata-rata untung</span><b class="pos">${A.aw == null ? '–' : '+' + A.aw.toFixed(1).replace('.', ',') + '%'}</b></div>
+    <div class="tile"><span>Rata-rata rugi</span><b class="neg">${A.al == null ? '–' : '-' + A.al.toFixed(1).replace('.', ',') + '%'}</b></div>
+    <div class="tile"><span>Hasil bersih total</span><b class="${A.total >= 0 ? 'pos' : 'neg'}">${rpS(A.total)}</b></div>
+    <div class="tile"><span>Rata-rata per transaksi</span><b class="${A.ekspektasi >= 0 ? 'pos' : 'neg'}">${rpS(A.ekspektasi)}</b></div>
+    <div class="tile"><span>Faktor laba (untung ÷ rugi)</span><b>${A.pf == null ? '–' : A.pf.toFixed(2).replace('.', ',')}</b></div></div>`;
+  if (A.impas != null) h += `<p class="note">Dengan rata-rata untung dan rugi Anda saat ini, Anda perlu menang sekitar <b>${pc(A.impas)}</b> dari transaksi agar impas. Persentase menang Anda <b>${pc(A.wr)}</b>${A.wr >= A.impas ? ' (di atas batas impas)' : ' (di bawah batas impas)'}.</p>`;
+  const seg = (judul, a, b, la, lb) => {
+    const sa = jrStat(a), sb = jrStat(b);
+    const baris = (l, s) => `<tr><td>${l}</td><td>${s.n}</td><td>${pc(s.wr)}</td><td class="${s.total >= 0 ? 'pos' : 'neg'}">${s.n ? rpS(s.total) : '–'}</td></tr>`;
+    return `<h4 style="margin:10px 0 4px">${judul}</h4><table><thead><tr><th></th><th>Transaksi</th><th>Menang</th><th>Hasil bersih</th></tr></thead><tbody>${baris(la, sa)}${baris(lb, sb)}</tbody></table>`;
+  };
+  const beli = x => x.skor != null && x.skor >= th;
+  h += seg('Apakah sinyal robot terbukti?', t.filter(beli), t.filter(x => !beli(x)), 'Dibeli saat skor ≥ ' + th + ' (sinyal beli)', 'Dibeli saat skor di bawahnya');
+  const ber = t.filter(x => jrJmlCek(x).total); const disip = x => { const j = jrJmlCek(x); return j.lulus >= j.total - 1; };
+  if (ber.length) h += seg('Apakah disiplin daftar periksa membantu?', ber.filter(disip), ber.filter(x => !disip(x)), 'Daftar periksa hampir/seluruhnya terpenuhi', 'Banyak item belum terpenuhi');
+  const kel = {}; t.forEach(x => { kel[x.keluar] = (kel[x.keluar] || 0) + 1; });
+  h += `<p class="note">Alasan keluar: ${Object.keys(kel).map(a => esc(ALASAN_TXT[a] || a) + ' ' + kel[a] + '×').join(' · ')}. Bila banyak keluar karena "keputusan sendiri / emosi" dan hasilnya buruk, itu tanda perlu lebih patuh pada stop dan target.</p>
+    <p class="note">Rapor ini mengukur riwayat Anda sendiri, bukan jaminan hasil ke depan. Alat edukasi, bukan saran investasi.</p>`;
+  return h;
+}
+function jrAksi(ev){
+  const b = ev.target.closest('[data-jr-aksi]'); if (!b) return;
+  const a = b.dataset.jrAksi, id = b.dataset.id;
+  if (a === 'tutup') { JR.tutupId = id; renderJurnal(); return; }
+  if (a === 'batal') { JR.tutupId = null; renderJurnal(); return; }
+  if (a === 'hapus') {
+    if (!confirm('Hapus transaksi ini dari riwayat? Rapor akan dihitung ulang.')) return;
+    api('jurnalHapus', {id}).then(r => { S.jurnal = r.jurnal; renderJurnal(); }).catch(e => alert(e.message));
+    return;
+  }
+  if (a === 'simpan-tutup') {
+    const box = b.closest('.tile'), v = n => (box.querySelector('[data-jr="' + n + '"]') || {}).value;
+    api('jurnalTutup', {id, jual: Number(v('jual')), keluar: v('keluar'), tgl: v('tgl')})
+      .then(r => {
+        S.jurnal = r.jurnal; JR.tutupId = null;
+        const j = S.jurnal.find(x => x.id === id); if (j) delete S.pos[j.kode];
+        try { renderMon(); } catch (e) {} renderJurnal();
+      }).catch(e => alert(e.message));
+  }
+}
+$('#jrOpen').addEventListener('click', jrAksi); $('#jrHist').addEventListener('click', jrAksi);
+$('#jrKode').onchange = jrSaran;
+['#jrE', '#jrLot', '#jrStop', '#jrTp', '#jrMan1', '#jrMan2'].forEach(id => { $(id).addEventListener('input', jrRenderCek); $(id).addEventListener('change', jrRenderCek); });
+$('#jrForm').addEventListener('toggle', () => { if ($('#jrForm').open) { if (!$('#jrE').value) jrSaran(); else jrRenderCek(); $('#jrTgl').value = wibNow().toISOString().slice(0, 10); } });
+$('#jrSimpan').onclick = async () => {
+  const msg = t => { $('#jrMsg').textContent = t || ''; };
+  const k = $('#jrKode').value, e = jrNilai('#jrE'), lots = jrNilai('#jrLot');
+  if (!k || !(e > 0) || !(lots >= 1) || Math.floor(lots) !== lots) { msg('Isi saham, harga beli, dan lot (bilangan bulat).'); return; }
+  const it = jrCek(), kurang = it.filter(x => x.ok !== true);
+  if (kurang.length && !confirm('Ada ' + kurang.length + ' item daftar periksa yang belum terpenuhi:\n\n- ' + kurang.map(x => x.t).join('\n- ') + '\n\nTetap catat pembelian ini?')) return;
+  const st = S.stocks[k], sc = st ? lastScore(st) : null;
+  msg('Menyimpan…'); $('#jrSimpan').disabled = true;
+  try {
+    const r = await api('jurnalMasuk', {kode: k, e, lots, stop: jrNilai('#jrStop') || 0, tp: jrNilai('#jrTp') || 0, tgl: $('#jrTgl').value || '',
+      skor: sc ? Math.round(sc.total) : null, vonis: sc ? verdict(sc.total).t : '', alasan: $('#jrAlasan').value, cek: it.map(x => x.ok === true ? 1 : 0).join('')});
+    S.jurnal = r.jurnal; S.pos[k] = {e, lots, stop: jrNilai('#jrStop') || 0, tp: jrNilai('#jrTp') || 0};
+    try { renderMon(); } catch (er) {}
+    $('#jrAlasan').value = ''; $('#jrMan1').checked = false; $('#jrMan2').checked = false; $('#jrE').value = '';
+    msg('Tercatat. Posisi muncul di kartu pantauan.'); renderJurnal();
+  } catch (er) { msg(er.message); }
+  $('#jrSimpan').disabled = false;
+};
+
 $('#btnUbahSandi').onclick = () => { $('#pwCard').hidden = !$('#pwCard').hidden; $('#pwStat').textContent = ''; };
 $('#btnPwBatal').onclick = () => { $('#pwCard').hidden = true; };
 $('#btnPwSimpan').onclick = async () => {
@@ -924,8 +1131,9 @@ function renderAll(){
   $('#wlCard').hidden = !names.length;
   $('#detail').hidden = !names.length;
   $('#count').textContent = names.length ? names.length + ' saham di watchlist' : '';
-  if (!names.length) { $('#pgCard').hidden = true; $('#monCard').hidden = true; renderKB(); return; }
+  if (!names.length) { $('#pgCard').hidden = true; $('#monCard').hidden = true; try { renderJurnal(); } catch (e) {} renderKB(); return; }
   renderWatch(); renderPeluang(); renderKB(); renderMon(); renderDetail();
+  try { renderJurnal(); } catch (e) {}
 }
 function meterHTML(v){
   const w = Math.abs(v) / 2, col = v >= 0 ? 'var(--good)' : 'var(--bad)';
