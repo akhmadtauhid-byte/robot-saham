@@ -134,8 +134,8 @@ tr.sel{background:var(--bg)}
     </div>
     <form id="formMasuk" autocomplete="on">
       <h3>Masuk</h3>
-      <label>Email <input type="email" id="mEmail" autocomplete="username" required></label>
-      <label class="pwrow">Kata sandi <input type="password" id="mSandi" autocomplete="current-password" required><button type="button" class="seg" data-eye="mSandi">Lihat</button></label>
+      <label>Email <input type="email" id="mEmail" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required></label>
+      <label class="pwrow">Kata sandi <input type="password" id="mSandi" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required><button type="button" class="seg" data-eye="mSandi">Lihat</button></label>
       <button class="primary" type="submit" id="btnMasuk">Masuk</button>
     </form>
     <form id="formDaftar" autocomplete="on" hidden>
@@ -775,7 +775,7 @@ async function prosesAuth(aksi, body, tombol){
   } catch (e) { $('#authErr').textContent = e.message; }
   bt.disabled = false; bt.textContent = t0;
 }
-$('#formMasuk').addEventListener('submit', e => { e.preventDefault(); prosesAuth('masuk', {email: $('#mEmail').value.trim(), sandi: $('#mSandi').value}, '#btnMasuk'); });
+$('#formMasuk').addEventListener('submit', e => { e.preventDefault(); prosesAuth('masuk', {email: $('#mEmail').value.trim().toLowerCase(), sandi: $('#mSandi').value}, '#btnMasuk'); });
 $('#formDaftar').addEventListener('submit', e => {
   e.preventDefault();
   prosesAuth('daftar', {nama: $('#dNama').value.trim(), email: $('#dEmail').value.trim(), sandi: $('#dSandi').value, undangan: $('#dUndangan').value.trim()}, '#btnDaftar');
