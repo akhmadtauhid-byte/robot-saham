@@ -158,6 +158,7 @@ tr.sel{background:var(--bg)}
       <div><span class="who" id="whoNama"></span><span class="chip" id="whoPeran"></span><div class="note" id="whoEmail"></div></div>
       <div class="row" style="gap:6px">
         <button id="btnAdmin" hidden>Panel admin</button>
+        <button id="btnNotif">Notifikasi HP</button>
         <button id="btnUbahSandi">Ubah kata sandi</button>
         <button id="btnKeluar">Keluar</button>
       </div>
@@ -173,6 +174,11 @@ tr.sel{background:var(--bg)}
       <button id="btnPwBatal">Batal</button>
     </div>
     <div class="note" id="pwStat" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card" id="notifCard" hidden>
+    <h3>Notifikasi ke HP (Telegram)</h3>
+    <div id="notifBody"><p class="note">Memuat…</p></div>
   </div>
 
   <div class="card" id="adminCard" hidden>
@@ -754,7 +760,7 @@ function keluarLokal(pesan){
   SES.token = ''; SES.user = null; simpanSesi('');
   S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = '';
   if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
-  $('#adminCard').hidden = true; $('#pwCard').hidden = true;
+  $('#adminCard').hidden = true; $('#pwCard').hidden = true; $('#notifCard').hidden = true; notifBerhenti();
   renderAll(); tampil(false);
   $('#authErr').textContent = pesan || ''; $('#mSandi').value = ''; $('#dSandi').value = '';
   $('#srcStat').textContent = ''; $('#kelolaStat').textContent = ''; $('#srcErr').textContent = '';
@@ -788,6 +794,70 @@ function tabAuth(masuk){
 $('#tabMasuk').onclick = () => tabAuth(true); $('#tabDaftar').onclick = () => tabAuth(false);
 document.querySelectorAll('[data-eye]').forEach(b => b.onclick = () => { const i = $('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? 'Lihat' : 'Sembunyi'; });
 $('#btnKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
+
+// ===================== NOTIFIKASI TELEGRAM =====================
+let NOTIF = null, notifTimer = null;
+function notifBerhenti(){ if (notifTimer) { clearInterval(notifTimer); notifTimer = null; } }
+function notifPesan(t, salah){ const e = $('#notifMsg'); if (e) { e.textContent = t || ''; e.style.color = salah ? '#b00020' : ''; } }
+async function muatNotif(){
+  const body = $('#notifBody');
+  try { NOTIF = await api('notif'); } catch (e) { body.innerHTML = '<p class="note"></p>'; body.firstChild.textContent = e.message; return; }
+  renderNotif();
+}
+function renderNotif(){
+  const n = NOTIF, body = $('#notifBody');
+  if (!n.siap) {
+    body.innerHTML = '<p>Bot Telegram belum diatur oleh admin. Minta admin membuka Google Sheets &gt; menu <b>Robot Saham &gt; 4. Atur bot Telegram</b> dan <b>5. Pasang pemantau harga</b>.</p>';
+    return;
+  }
+  if (!n.terhubung) {
+    body.innerHTML = '<p>Dapatkan peringatan di HP saat harga posisi Anda menyentuh <b>stop</b>, mencapai <b>target</b>, atau untung/rugi melewati batas yang Anda tentukan.</p>' +
+      '<ol class="note" style="margin:6px 0 8px 18px;padding:0"><li>Pasang aplikasi Telegram di HP dan masuk.</li><li>Tekan <b>Hubungkan Telegram</b>, lalu tekan tombol <b>Start</b> di Telegram.</li><li>Kembali ke sini; status akan berubah otomatis.</li></ol>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap"><button class="primary" id="nTaut">Hubungkan Telegram</button> <a id="nLink" target="_blank" rel="noopener" hidden>Buka Telegram</a> <button id="nPeriksa" hidden>Saya sudah tekan Start</button></div>' +
+      '<div class="note" id="notifMsg" style="margin-top:6px"></div>';
+    $('#nTaut').onclick = async () => {
+      notifPesan('Membuat tautan…');
+      try {
+        const r = await api('notifTaut');
+        const a = $('#nLink'); a.href = r.link; a.textContent = 'Buka Telegram (@' + r.bot + ')'; a.hidden = false; $('#nPeriksa').hidden = false;
+        notifPesan('Tekan "Buka Telegram", lalu Start. Tautan berlaku 15 menit.');
+        notifMulaiCek();
+      } catch (e) { notifPesan(e.message, true); }
+    };
+    $('#nPeriksa').onclick = () => notifCek(true);
+    return;
+  }
+  body.innerHTML = '<p>\u2705 Telegram terhubung.</p>' +
+    '<div class="row" style="gap:10px;flex-wrap:wrap;align-items:end">' +
+    '<label><input type="checkbox" id="nAktif"> Kirim peringatan</label>' +
+    '<label>Beri tahu bila untung \u2265 (%) <input type="number" id="nUntung" min="0" max="1000" step="0.5" style="width:90px"></label>' +
+    '<label>Beri tahu bila rugi \u2265 (%) <input type="number" id="nRugi" min="0" max="100" step="0.5" style="width:90px"></label>' +
+    '<button class="primary" id="nSimpan">Simpan</button></div>' +
+    '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button id="nTes">Kirim pesan tes</button><button id="nPutus">Putuskan Telegram</button></div>' +
+    '<div class="note" id="notifMsg" style="margin-top:6px"></div>' +
+    '<p class="note">Peringatan juga dikirim otomatis bila harga menyentuh <b>Stop</b> atau mencapai <b>Target</b> yang Anda isi di kotak posisi (dan saat harga tinggal 1% dari stop). Isi 0 untuk mematikan batas persen. Tiap jenis peringatan dikirim sekali per hari per saham. Harga tertunda sekitar 15-20 menit dan hanya dicek pada jam bursa; ini bukan pengganti order stop di sekuritas. Alat bantu edukasi, bukan saran investasi.</p>';
+  $('#nAktif').checked = n.aktif; $('#nUntung').value = n.untung || 0; $('#nRugi').value = n.rugi || 0;
+  $('#nSimpan').onclick = async () => {
+    notifPesan('Menyimpan…');
+    try { NOTIF = await api('notifSimpan', {aktif: $('#nAktif').checked, untung: Number($('#nUntung').value || 0), rugi: Number($('#nRugi').value || 0)}); renderNotif(); notifPesan('Tersimpan.'); }
+    catch (e) { notifPesan(e.message, true); }
+  };
+  $('#nTes').onclick = async () => { notifPesan('Mengirim…'); try { await api('notifTes'); notifPesan('Pesan tes terkirim. Periksa Telegram Anda.'); } catch (e) { notifPesan(e.message, true); } };
+  $('#nPutus').onclick = async () => { if (!confirm('Putuskan Telegram? Peringatan akan berhenti.')) return; try { NOTIF = await api('notifPutus'); renderNotif(); } catch (e) { notifPesan(e.message, true); } };
+}
+async function notifCek(manual){
+  try {
+    NOTIF = await api('notifPeriksa');
+    if (NOTIF.terhubung) { notifBerhenti(); renderNotif(); return true; }
+    if (manual) notifPesan('Belum terdeteksi. Pastikan Anda sudah menekan Start di Telegram, lalu coba lagi.', true);
+  } catch (e) { notifBerhenti(); notifPesan(e.message, true); }
+  return false;
+}
+function notifMulaiCek(){
+  notifBerhenti(); let n = 0;
+  notifTimer = setInterval(async () => { if (++n > 20) { notifBerhenti(); return; } await notifCek(false); }, 5000);
+}
+$('#btnNotif').onclick = () => { const c = $('#notifCard'); c.hidden = !c.hidden; if (!c.hidden) muatNotif(); else notifBerhenti(); };
 
 $('#btnUbahSandi').onclick = () => { $('#pwCard').hidden = !$('#pwCard').hidden; $('#pwStat').textContent = ''; };
 $('#btnPwBatal').onclick = () => { $('#pwCard').hidden = true; };
