@@ -241,11 +241,17 @@ tr.sel{background:var(--bg)}
     <div class="tblwrap"><table id="wl"></table></div>
   </div>
 
+  <div class="card" id="pasarCard" hidden>
+    <h3>Kondisi pasar saat ini</h3>
+    <div id="pasarOut"></div>
+  </div>
+
   <div class="card" id="kbCard" hidden>
     <h3>Kandidat beli hari ini (dipindai dari saham IDX30)</h3>
     <div id="kbOut"></div>
     <div class="row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap">
       <label class="chk"><input type="checkbox" id="kbTerj" checked> Hanya yang terjangkau modal saya (1 lot ≤ modal)</label>
+      <label class="chk"><input type="checkbox" id="kbPasar" checked> Perketat syarat saat pasar lemah (skor minimal +15)</label>
       <button id="kbMuat">Pindai ulang</button>
     </div>
     <p class="note">Alat edukasi, bukan saran investasi. "Kandidat" berarti lolos aturan teknikal robot (skor ≥ batas masuk, likuid, RSI tidak terlalu panas), bukan ramalan harga naik. Cek sendiri berita, kinerja perusahaan, dan hasil backtest sebelum memutuskan, dan tetap pasang stop.</p>
@@ -278,7 +284,7 @@ tr.sel{background:var(--bg)}
 <script>
 "use strict";
 /* ===== PENGATURAN: isi dengan URL Web App Apps Script Anda (berakhiran /exec) ===== */
-const API_URL = "https://script.google.com/macros/s/AKfycbwxS4MtHqsiCJ1Y1t-fZBSXSKV5RAagsMy23c5_-LAweuCD9ZgwPIyhTHHPPLyl3Q5-/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwQ23rpLY1jZs3SA-NNZA0pmntsyEnA67AQ_Qh2fhAAu0__UN6tMfTQFK9oCV9JOwHF/exec";
 /* ===================== util ===================== */
 const $ = s => document.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -963,6 +969,7 @@ function renderDetail(){
         <div class="fill" style="${sc.total >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(sc.total) / 2}%;background:${sc.total >= 0 ? 'var(--good)' : 'var(--bad)'}"></div>
       </div>
       <div class="scale"><span>−100 jual</span><span><b style="color:var(--ink);font-size:13px">Skor ${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</b></span><span>+100 beli</span></div>
+      <div class="alertbox ${v.cls}" id="ringkasBox" style="margin-top:10px">${ringkasan(st, S.pos && S.pos[st.name], d.c[n])}</div>
       ${warns.length ? '<ul class="warnlist">' + warns.map(w => '<li>⚠ ' + esc(w) + '</li>').join('') + '</ul>' : ''}
     </div>
 
@@ -1263,9 +1270,79 @@ function renderLiveInfo(){
   const lg = $('#lglive'); if (lg) lg.innerHTML = '<span><i style="background:var(--s1)"></i>garis harga terkini</span>';
 }
 
+/* ===================== kondisi pasar & ringkasan sederhana ===================== */
+function kondisiPasar(){
+  if (!PASAR.loaded || PASAR.st.length < 10) return null;
+  const th = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25;
+  let n = 0, a20 = 0, a50 = 0, a200 = 0, n200 = 0, sum = 0, beli = 0, buruk = 0;
+  PASAR.st.forEach(st => {
+    const i = st.d.c.length - 1, c = st.d.c[i], sc = lastScore(st); if (!sc) return;
+    n++; sum += sc.total;
+    if (st.I.sma20[i] != null && c > st.I.sma20[i]) a20++;
+    if (st.I.sma50[i] != null && c > st.I.sma50[i]) a50++;
+    if (st.I.sma200[i] != null) { n200++; if (c > st.I.sma200[i]) a200++; }
+    if (sc.total >= th) beli++;
+    if (sc.total <= -25) buruk++;
+  });
+  if (n < 10) return null;
+  const p20 = a20 / n, p50 = a50 / n, p200 = n200 ? a200 / n200 : null, avg = sum / n;
+  let level, t, adv;
+  if (p50 >= 0.6 && avg >= 15) { level = 'sehat'; t = 'PASAR SEHAT'; adv = 'Sebagian besar saham besar sedang naik. Sinyal beli lebih bisa dipercaya, tetapi tetap pasang stop.'; }
+  else if (p50 < 0.4 || avg < -15) { level = 'lemah'; t = 'PASAR LEMAH'; adv = 'Kebanyakan saham besar masih turun. Membeli melawan arah pasar umumnya lebih berisiko. Menunggu, atau memakai ukuran posisi kecil, adalah pilihan yang wajar.'; }
+  else { level = 'netral'; t = 'PASAR CAMPURAN'; adv = 'Sebagian saham naik, sebagian turun. Pilih hanya saham yang kuat dan pakai ukuran posisi lebih kecil.'; }
+  return {level, t, adv, n, p20, p50, p200, avg, beli, buruk, cls: level === 'sehat' ? 'good' : level === 'lemah' ? 'bad' : 'warn', ic: level === 'sehat' ? '▲' : level === 'lemah' ? '▼' : '●'};
+}
+function renderPasar(){
+  const card = $('#pasarCard'); if (!card) return;
+  card.hidden = !SES.token; if (!SES.token) return;
+  const K = kondisiPasar(), out = $('#pasarOut');
+  if (!K) { out.innerHTML = `<p class="note" style="margin:0">${PASAR.busy ? 'Memuat data pasar…' : 'Belum cukup data pasar (perlu minimal 10 saham IDX30). Admin: tekan "Perbarui data pasar semua saham" di Panel admin, lalu "Pindai ulang" di kartu Kandidat beli.'}</p>`; return; }
+  const pc = x => x == null ? '–' : (x * 100).toFixed(0) + '%';
+  out.innerHTML = `<div class="head"><span class="badge ${K.cls}"><i>${K.ic}</i>${K.t}</span><span class="note" style="margin:0">dihitung dari ${K.n} saham IDX30</span></div>
+    <p style="margin:8px 0">${esc(K.adv)}</p>
+    <div class="tiles">
+      <div class="tile"><span>Di atas rata-rata 20 hari</span><b>${pc(K.p20)}</b></div>
+      <div class="tile"><span>Di atas rata-rata 50 hari</span><b>${pc(K.p50)}</b></div>
+      <div class="tile"><span>Di atas rata-rata 200 hari</span><b>${pc(K.p200)}</b></div>
+      <div class="tile"><span>Rata-rata skor robot</span><b class="${K.avg >= 0 ? 'pos' : 'neg'}">${K.avg >= 0 ? '+' : ''}${K.avg.toFixed(0)}</b></div>
+      <div class="tile"><span>Sinyal beli / hindari</span><b>${K.beli} / ${K.buruk}</b></div></div>
+    <p class="note">Ini rangkuman luas dari saham besar (bukan angka IHSG resmi). Makin sedikit saham di atas rata-rata 50 harinya, makin lemah pasarnya.</p>`;
+}
+function ringkasan(st, pos, price){
+  const sc = lastScore(st); if (!sc) return '';
+  const {d, I} = st, n = d.c.length - 1, c = d.c[n], th = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25;
+  const s20 = I.sma20[n], s50 = I.sma50[n], s200 = I.sma200[n];
+  const k = {}; sc.comps.forEach(x => { k[x.k] = x.v; });
+  let trend;
+  if (s20 != null && s50 != null && c > s20 && c > s50 && (s200 == null || c > s200)) trend = 'harga di atas rata-rata 20, 50' + (s200 != null ? ', dan 200' : '') + ' hari (tren naik)';
+  else if (s20 != null && s50 != null && s200 != null && c < s20 && c < s50 && c < s200) trend = 'harga di bawah rata-rata 20, 50, dan 200 hari (tren turun)';
+  else if (s50 != null && c < s50) trend = 'harga masih di bawah rata-rata 50 hari';
+  else if (s20 != null && s50 != null && c > s50 && c < s20) trend = 'tren menengah naik tetapi sedang koreksi pendek';
+  else trend = 'arah tren belum jelas';
+  const r = I.rsi[n];
+  const mom = r == null ? '' : r >= 70 ? 'momentum sudah panas (rawan koreksi)' : r >= 50 ? 'momentum sehat' : r >= 30 ? 'momentum lemah' : 'tertekan kuat (jenuh jual)';
+  const mac = k.macd != null ? (k.macd > 0.5 ? 'MACD menguat' : k.macd < -0.5 ? 'MACD memburuk' : '') : '';
+  const vol = k.vol != null && k.vol > 0.3 ? 'didukung volume ramai' : '';
+  const extra = [mom, mac, vol].filter(Boolean).join(', ');
+  let kal, lang;
+  if (sc.total >= 50) { kal = 'Sinyal beli kuat'; lang = 'Tentukan stop dulu (lihat Rencana trade) dan jangan melebihi anggaran risiko.'; }
+  else if (sc.total >= th) { kal = 'Layak dipertimbangkan beli bertahap'; lang = 'Tentukan stop dulu (lihat Rencana trade) dan jangan melebihi anggaran risiko.'; }
+  else if (sc.total > -25) { kal = 'Tunggu dulu, sinyal campuran'; lang = `Menunggu skor mencapai +${th} dan harga di atas rata-rata 50 hari sebelum membeli.`; }
+  else if (sc.total > -50) { kal = 'Jangan menambah posisi'; lang = 'Menunggu skor membaik. Bila sudah memegang, patuhi stop Anda.'; }
+  else { kal = 'Hindari membeli'; lang = 'Menunggu tren berbalik. Bila sudah memegang, patuhi stop Anda.'; }
+  let t = `<b>${kal}:</b> ${trend}${extra ? '; ' + extra : ''}. ${lang}`;
+  const K = kondisiPasar();
+  if (K && K.level === 'lemah' && sc.total >= th) t += ' <span style="color:var(--warn)">⚠ Pasar secara umum sedang lemah, hati-hati.</span>';
+  if (pos && posValid(pos) && price > 0) {
+    const g = price / pos.e - 1, ex = isFinite(S.cfg.exitTh) ? S.cfg.exitTh : 0;
+    t += `<br><b>Posisi Anda:</b> ${g >= 0 ? 'untung' : 'rugi'} sementara ${fmtPct(Math.abs(g), 1)} (sebelum fee) dari harga beli ${fmtP(pos.e)} (berdasar penutupan terakhir).` + (sc.total <= ex ? ' Skor sudah di bawah batas keluar: pertimbangkan keluar sesuai rencana Anda.' : '');
+  }
+  return t;
+}
+
 /* ===================== kandidat beli (pindai pasar) ===================== */
 const PASAR = {st: [], menunggu: [], total: 0, updated: '', busy: false, loaded: false, err: ''};
-const KB = {terjangkau: true};
+const KB = {terjangkau: true, pasar: true, thPakai: 25, thDasar: 25};
 function analisaPasar(x){
   const d = {date: x.d.map(t => new Date(t + 'T00:00:00Z')), o: x.o, h: x.h, l: x.l, c: x.c, v: x.v};
   return {name: x.kode, d, I: analyze(d)};
@@ -1282,7 +1359,9 @@ async function muatPasar(){
   PASAR.busy = false; renderKB();
 }
 function hitungKB(){
-  const th = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25, out = [];
+  const th0 = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25, K = kondisiPasar();
+  const th = (KB.pasar && K && K.level === 'lemah') ? th0 + 15 : th0, out = [];
+  KB.thPakai = th; KB.thDasar = th0;
   PASAR.st.forEach(st => {
     const sc = lastScore(st), pe = peluang(st), pl = plan(st.d, st.I, S.cfg);
     if (!sc || !pe || !pl) return;
@@ -1305,10 +1384,11 @@ function barisKB(r){
     <td><button type="button" data-kb="${esc(k)}" data-ada="${ada ? 1 : 0}">${ada ? 'Buka' : 'Tambah'}</button></td></tr>`;
 }
 function renderKB(){
+  renderPasar();
   const card = $('#kbCard'); if (!card) return;
   card.hidden = !SES.token; if (!SES.token) return;
   const out = $('#kbOut'), btn = $('#kbMuat'); btn.disabled = PASAR.busy;
-  $('#kbTerj').checked = KB.terjangkau;
+  $('#kbTerj').checked = KB.terjangkau; $('#kbPasar').checked = KB.pasar;
   if (PASAR.busy && !PASAR.loaded) { out.innerHTML = '<p class="note" style="margin:0">Memuat data pasar…</p>'; return; }
   if (PASAR.err) { out.innerHTML = `<div class="alertbox bad">Gagal memuat data pasar: ${esc(PASAR.err)}</div>`; return; }
   if (!PASAR.loaded) { out.innerHTML = '<p class="note" style="margin:0">Tekan "Pindai ulang" untuk memuat data pasar.</p>'; return; }
@@ -1316,9 +1396,11 @@ function renderKB(){
     out.innerHTML = '<div class="alertbox warn">Data pasar belum terisi. Admin: buka Panel admin lalu tekan "Perbarui data pasar semua saham" (ulangi bila ada yang belum sempat), kemudian tekan "Pindai ulang".</div>'; return;
   }
   const semua = hitungKB(), tampil = KB.terjangkau ? semua.filter(r => r.terjangkau) : semua;
-  const sembunyi = semua.length - tampil.length;
+  const sembunyi = semua.length - tampil.length, ketat = KB.thPakai > KB.thDasar;
   const lolos = tampil.filter(r => r.lolos).sort((a, b) => b.gab - a.gab).slice(0, 8);
   let h = `<p class="note" style="margin:0 0 6px">Dipindai ${semua.length} dari ${PASAR.total} saham${PASAR.updated ? ', data diperbarui ' + fmtUpd(PASAR.updated) + ' WIB' : ''}. Modal Anda Rp ${fmtP(S.cfg.cap)}${PASAR.menunggu.length ? ' · menunggu data: ' + PASAR.menunggu.map(esc).join(', ') : ''}.${sembunyi > 0 ? ' ' + sembunyi + ' saham disembunyikan karena 1 lot melebihi modal.' : ''}</p>`;
+  if (ketat) h += `<div class="alertbox warn" style="margin-top:0">Pasar sedang lemah, jadi syarat skor beli diperketat dari +${KB.thDasar} menjadi <b>+${KB.thPakai}</b>. Matikan centang "Perketat syarat" di bawah bila ingin memakai syarat biasa.</div>`;
+  else { const K = kondisiPasar(); if (K && K.level === 'lemah') h += '<div class="alertbox warn" style="margin-top:0">Pasar sedang lemah: kandidat di bawah berisiko lebih tinggi. Pertimbangkan menunggu atau memakai ukuran posisi kecil.</div>'; }
   const kepala = '<div class="tblwrap"><table><thead><tr><th>Saham</th><th class="num">Harga</th><th>Skor robot</th><th class="num">Potensi</th><th class="num">RSI</th><th class="num">Rencana (acuan)</th><th>Lot sesuai modal &amp; risiko</th><th>Alasan &amp; catatan</th><th></th></tr></thead><tbody>';
   if (lolos.length) h += `<p style="margin:0 0 8px"><b class="pos">${lolos.length} kandidat memenuhi syarat beli</b> (urut gabungan skor robot &amp; potensi):</p>` + kepala + lolos.map(barisKB).join('') + '</tbody></table></div>';
   else {
@@ -1339,6 +1421,8 @@ function renderKB(){
   const b = document.getElementById('kbMuat'), c = document.getElementById('kbTerj');
   if (b) b.onclick = () => muatPasar();
   if (c) c.onchange = () => { KB.terjangkau = c.checked; renderKB(); };
+  const pz = document.getElementById('kbPasar');
+  if (pz) pz.onchange = () => { KB.pasar = pz.checked; renderKB(); };
 })();
 
 /* ===================== pantauan banyak posisi ===================== */
