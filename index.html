@@ -259,7 +259,9 @@ tr.sel{background:var(--bg)}
       <label class="chk"><input type="checkbox" id="kbTerj" checked> Hanya yang terjangkau modal saya (1 lot ≤ modal)</label>
       <label class="chk"><input type="checkbox" id="kbPasar" checked> Perketat syarat saat pasar lemah (skor minimal +15)</label>
       <button id="kbMuat">Pindai ulang</button>
+      <button id="kbSegar">Perbarui data pasar</button>
     </div>
+    <div class="note" id="kbSegarMsg" style="margin:6px 0 0" role="status" aria-live="polite"></div>
     <p class="note">Alat edukasi, bukan saran investasi. "Kandidat" berarti lolos aturan teknikal robot (skor ≥ batas masuk, likuid, RSI tidak terlalu panas), bukan ramalan harga naik. Cek sendiri berita, kinerja perusahaan, dan hasil backtest sebelum memutuskan, dan tetap pasang stop.</p>
   </div>
 
@@ -824,6 +826,28 @@ $('#tabMasuk').onclick = () => tabAuth(true); $('#tabDaftar').onclick = () => ta
 document.querySelectorAll('[data-eye]').forEach(b => b.onclick = () => { const i = $('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; b.textContent = i.type === 'password' ? 'Lihat' : 'Sembunyi'; });
 $('#btnKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
 
+/* ===================== PERBARUI DATA PASAR (SEMUA PENGGUNA) ===================== */
+let kbSegarBusy = false;
+async function perbaruiDataPasar(){
+  if (kbSegarBusy || !SES.token) return;
+  const msg = t => { const e = $('#kbSegarMsg'); if (e) e.textContent = t || ''; }, tb = $('#kbSegar');
+  kbSegarBusy = true; tb.disabled = true; msg('Memperbarui data pasar… bisa beberapa menit. Jangan tutup halaman.');
+  try {
+    const j = await api('segarkanPasar');
+    if (j.sibuk) { msg('Pembaruan sedang dijalankan (oleh jadwal otomatis atau pengguna lain). Tunggu 1 sampai 2 menit, lalu tekan "Pindai ulang".'); }
+    else {
+      const g = j.segar || {ok: [], gagal: [], sisa: 0};
+      const n = g.ok.length;
+      msg(n === 0 && !g.gagal.length && !g.sisa
+        ? 'Data pasar sudah baru (maksimal ' + (j.jeda || 30) + ' menit pada jam bursa). Tidak ada yang perlu diperbarui.'
+        : n + ' saham diperbarui' + (g.gagal.length ? ', ' + g.gagal.length + ' gagal (' + g.gagal.slice(0, 4).map(x => x.kode).join(', ') + ')' : '') + (g.sisa ? ', ' + g.sisa + ' belum sempat: tekan lagi' : '') + '.');
+      PASAR.busy = false; await muatPasar();
+    }
+  } catch (e) { msg(e.message); }
+  kbSegarBusy = false; tb.disabled = false;
+}
+$('#kbSegar').onclick = perbaruiDataPasar;
+
 // ===================== NOTIFIKASI TELEGRAM =====================
 let NOTIF = null, notifTimer = null;
 function notifBerhenti(){ if (notifTimer) { clearInterval(notifTimer); notifTimer = null; } }
@@ -1110,7 +1134,7 @@ $('#adminBody').addEventListener('click', async e => {
     if (a === 'aktif') { await api('setAktif', {id: b.dataset.id, aktif: b.dataset.on === '1'}); return muatAdmin(); }
     if (a === 'hapus') { await api('hapusPengguna', {id: b.dataset.id}); return muatAdmin(); }
     if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara + ' (sampaikan ke yang bersangkutan; minta segera diganti).'); return; }
-    if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); pesan('Selesai: ' + j.segar.ok.length + ' berhasil, ' + j.segar.gagal.length + ' gagal, ' + j.segar.sisa + ' belum sempat (tekan lagi).'); }
+    if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); const g0 = j.segar; pesan(g0.ok.length + g0.gagal.length + g0.sisa === 0 ? 'Semua data sudah baru, tidak ada yang perlu diperbarui.' : 'Selesai: ' + g0.ok.length + ' berhasil, ' + g0.gagal.length + ' gagal, ' + g0.sisa + ' belum sempat (tekan lagi).'); }
   } catch (err) { pesan(err.message); }
 });
 
@@ -1574,7 +1598,7 @@ function renderPasar(){
   const card = $('#pasarCard'); if (!card) return;
   card.hidden = !SES.token; if (!SES.token) return;
   const K = kondisiPasar(), out = $('#pasarOut');
-  if (!K) { out.innerHTML = `<p class="note" style="margin:0">${PASAR.busy ? 'Memuat data pasar…' : 'Belum cukup data pasar (perlu minimal 10 saham IDX30). Admin: tekan "Perbarui data pasar semua saham" di Panel admin, lalu "Pindai ulang" di kartu Kandidat beli.'}</p>`; return; }
+  if (!K) { out.innerHTML = `<p class="note" style="margin:0">${PASAR.busy ? 'Memuat data pasar…' : 'Belum cukup data pasar (perlu minimal 10 saham IDX30). Tekan "Perbarui data pasar" di kartu ini (semua pengguna boleh).'}</p>`; return; }
   const pc = x => x == null ? '–' : (x * 100).toFixed(0) + '%';
   out.innerHTML = `<div class="head"><span class="badge ${K.cls}"><i>${K.ic}</i>${K.t}</span><span class="note" style="margin:0">dihitung dari ${K.n} saham IDX30</span></div>
     <p style="margin:8px 0">${esc(K.adv)}</p>
@@ -1671,7 +1695,7 @@ function renderKB(){
   if (PASAR.err) { out.innerHTML = `<div class="alertbox bad">Gagal memuat data pasar: ${esc(PASAR.err)}</div>`; return; }
   if (!PASAR.loaded) { out.innerHTML = '<p class="note" style="margin:0">Tekan "Pindai ulang" untuk memuat data pasar.</p>'; return; }
   if (!PASAR.st.length) {
-    out.innerHTML = '<div class="alertbox warn">Data pasar belum terisi. Admin: buka Panel admin lalu tekan "Perbarui data pasar semua saham" (ulangi bila ada yang belum sempat), kemudian tekan "Pindai ulang".</div>'; return;
+    out.innerHTML = '<div class="alertbox warn">Data pasar belum terisi. Tekan "Perbarui data pasar" (semua pengguna boleh; ulangi bila ada yang belum sempat).</div>'; return;
   }
   const semua = hitungKB(), tampil = KB.terjangkau ? semua.filter(r => r.terjangkau) : semua;
   const sembunyi = semua.length - tampil.length, ketat = KB.thPakai > KB.thDasar;
