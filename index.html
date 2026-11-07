@@ -629,6 +629,32 @@ function lastScore(st){
   for (let i = st.d.c.length - 1; i >= 0; i--) if (st.I.sc[i]) return st.I.sc[i];
   return null;
 }
+/* perubahan harga/skor + penanda pantulan dalam tren turun */
+function perubahan(st){
+  const {d, I} = st, n = d.c.length - 1;
+  const chg1 = n > 0 ? d.c[n] / d.c[n-1] - 1 : null;
+  const chg5 = n >= 5 ? d.c[n] / d.c[n-5] - 1 : null;
+  const sn = I.sc[n], sp = n > 0 ? I.sc[n-1] : null;
+  const dS = sn && sp ? sn.total - sp.total : null;
+  const s50 = I.sma50[n];
+  const bounce = !!(sn && sn.total < 0 && chg5 != null && chg5 > 0.015 && s50 != null && d.c[n] < s50);
+  return {chg1, chg5, dS, sPrev: sp ? sp.total : null, bounce};
+}
+const fmtS = v => (v >= 0 ? '+' : '') + v.toFixed(0);
+function deltaSkorHTML(dS){
+  if (dS == null) return '–';
+  if (Math.abs(dS) < 0.5) return '<span class="note">0</span>';
+  return `<span class="${dS > 0 ? 'pos' : 'neg'}">${dS > 0 ? '▲' : '▼'} ${Math.abs(dS).toFixed(0)}</span>`;
+}
+function faktorSkor(sc){
+  const k = sc.comps.map(c => ({n: c.name, p: c.v * c.w})).sort((a, b) => a.p - b.p);
+  const neg = k.filter(x => x.p < -0.5).slice(0, 3), pos = k.filter(x => x.p > 0.5).reverse().slice(0, 3);
+  const f = a => a.map(x => esc(x.n) + ' (' + (x.p >= 0 ? '+' : '−') + Math.abs(x.p).toFixed(1).replace('.', ',') + ')').join(', ');
+  let t = '';
+  if (neg.length) t += '<div><b class="neg">Yang menekan skor:</b> ' + f(neg) + '</div>';
+  if (pos.length) t += '<div><b class="pos">Yang menopang skor:</b> ' + f(pos) + '</div>';
+  return t;
+}
 
 /* ===================== UI: input ===================== */
 function setErr(m){ $('#err').textContent = m || ''; }
@@ -1171,13 +1197,16 @@ function renderWatch(){
   rk.innerHTML = '<div><b class="pos">Kandidat beli:</b> ' + (beli.length ? nm(beli) : 'tidak ada yang memenuhi syarat beli hari ini') + '</div>'
     + (tunggu.length ? '<div><b style="color:var(--warn)">Tunggu:</b> ' + nm(tunggu) + '</div>' : '')
     + (hindari.length ? '<div><b class="neg">Hindari / kurangi:</b> ' + nm(hindari) + '</div>' : '');
-  let h = '<thead><tr><th>Saham</th><th class="num">Harga</th><th>Skor</th><th class="num"></th><th>Sinyal</th><th class="num">RSI</th><th class="num">Backtest</th><th class="num">Buy&amp;Hold</th><th></th></tr></thead><tbody>';
+  let h = '<thead><tr><th>Saham</th><th class="num">Harga</th><th class="num">Hari ini</th><th>Skor</th><th class="num"></th><th class="num" title="Perubahan skor dibanding hari bursa sebelumnya">Δ skor</th><th>Sinyal</th><th class="num">RSI</th><th class="num">Backtest</th><th class="num">Buy&amp;Hold</th><th></th></tr></thead><tbody>';
   for (const {st, sc} of rows) {
-    const n = st.d.c.length - 1, v = verdict(sc.total), bt = backtest(st.d, st.I, S.cfg);
+    const n = st.d.c.length - 1, v = verdict(sc.total), bt = backtest(st.d, st.I, S.cfg), pb = perubahan(st);
     h += `<tr class="pick ${st.name === S.sel ? 'sel' : ''}" data-n="${esc(st.name)}" tabindex="0">
-      <td><b>${esc(st.name)}</b></td><td class="num">${fmtP(st.d.c[n])}</td><td>${meterHTML(sc.total)}</td>
+      <td><b>${esc(st.name)}</b></td><td class="num">${fmtP(st.d.c[n])}</td>
+      <td class="num ${pb.chg1 == null ? '' : pb.chg1 >= 0 ? 'pos' : 'neg'}">${pb.chg1 == null ? '–' : fmtPct(pb.chg1, 2)}</td>
+      <td>${meterHTML(sc.total)}</td>
       <td class="num">${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</td>
-      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span></td>
+      <td class="num">${deltaSkorHTML(pb.dS)}</td>
+      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span>${pb.bounce ? ' <span class="badge warn" title="Harga memantul naik tetapi masih di bawah SMA50 dan skor negatif"><i>↻</i>pantulan</span>' : ''}</td>
       <td class="num">${st.I.rsi[n] != null ? st.I.rsi[n].toFixed(0) : '–'}</td>
       <td class="num ${bt.total >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.total)}</td>
       <td class="num ${bt.bh >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.bh)}</td>
@@ -1271,6 +1300,15 @@ function renderDetail(){
         <div class="fill" style="${sc.total >= 0 ? 'left:50%' : 'right:50%'};width:${Math.abs(sc.total) / 2}%;background:${sc.total >= 0 ? 'var(--good)' : 'var(--bad)'}"></div>
       </div>
       <div class="scale"><span>−100 jual</span><span><b style="color:var(--ink);font-size:13px">Skor ${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</b></span><span>+100 beli</span></div>
+      ${(() => {
+        const pb = perubahan(st);
+        let t = '';
+        if (pb.dS != null) t += `Skor kemarin <b>${fmtS(pb.sPrev)}</b> → hari ini <b>${fmtS(sc.total)}</b> (${Math.abs(pb.dS) < 0.5 ? 'tidak berubah' : pb.dS > 0 ? '<span class="pos">membaik ' + pb.dS.toFixed(0) + ' poin</span>' : '<span class="neg">memburuk ' + Math.abs(pb.dS).toFixed(0) + ' poin</span>'}).`;
+        if (pb.chg5 != null) t += ` Harga 5 hari terakhir: <b class="${pb.chg5 >= 0 ? 'pos' : 'neg'}">${fmtPct(pb.chg5, 2)}</b>.`;
+        let h = t ? '<p class="note" style="margin:8px 0 0">' + t + '</p>' : '';
+        if (pb.bounce) h += '<div class="alertbox warn" style="margin-top:8px"><b>↻ Memantul dalam tren turun.</b> Harga naik ' + fmtPct(pb.chg5, 1) + ' dalam 5 hari, tetapi masih di bawah rata-rata 50 hari dan skor tetap negatif. Pantulan seperti ini sering gagal. Tunggu harga bertahan di atas SMA50 dan MACD berbalik sebelum menganggap tren pulih.</div>';
+        return h;
+      })()}
       <div class="alertbox ${v.cls}" id="ringkasBox" style="margin-top:10px">${ringkasan(st, S.pos && S.pos[st.name], d.c[n])}</div>
       ${warns.length ? '<ul class="warnlist">' + warns.map(w => '<li>⚠ ' + esc(w) + '</li>').join('') + '</ul>' : ''}
     </div>
@@ -1278,7 +1316,9 @@ function renderDetail(){
     <div class="card live" id="livecard"></div>
 
     <div class="grid2">
-      <div class="card"><h3>Mengapa skornya begitu?</h3>
+      <div class="card"><h3>Mengapa skor ${sc.total >= 25 ? 'hijau' : sc.total <= -25 ? 'merah' : 'netral'}?</h3>
+        <div class="note" style="margin:0 0 8px">Skor = rata-rata berbobot dari 7 komponen di bawah. Ini mengukur <b>tren beberapa minggu</b>, bukan naik-turun hari ini.</div>
+        <div style="font-size:13.5px;margin-bottom:8px">${faktorSkor(sc)}</div>
         <div class="tblwrap"><table><thead><tr><th>Komponen</th><th class="num">Bobot</th><th>Arah</th><th class="num">Poin</th><th>Penjelasan</th></tr></thead><tbody>${compRows}</tbody></table></div>
       </div>
       <div class="card"><h3>Rencana trade (posisi beli)</h3>${planHTML}</div>
