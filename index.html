@@ -82,6 +82,18 @@ tr.sel{background:var(--bg)}
 .live .price{font-size:26px}
 .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);color:var(--ink2)}
 .pill.on{border-color:var(--good);color:var(--ink);background:var(--good-bg)}
+.sinyal{--gl:var(--good);position:sticky;top:0;z-index:40;margin:0 0 10px;padding:8px 12px;border:1px solid var(--good);border-left-width:6px;border-radius:8px;background:var(--good-bg);font-size:14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.sinyal[hidden]{display:none}
+.sinyal.bad{--gl:var(--bad);border-color:var(--bad);background:var(--bad-bg)}
+.sinyal.baru{box-shadow:0 0 0 2px var(--gl)}
+.sinyal.kedip{animation:sgKedip 1.4s ease-in-out infinite}
+@keyframes sgKedip{0%,100%{box-shadow:0 0 0 2px var(--gl),0 0 0 0 transparent;filter:none}50%{box-shadow:0 0 0 4px var(--gl),0 0 18px 4px var(--gl);filter:brightness(1.3)}}
+@media (prefers-reduced-motion: reduce){.sinyal.kedip{animation:none}}
+.sinyal .sg-isi{flex:1 1 320px}
+.sinyal .sg-item{display:inline-block;margin-right:12px}
+.sinyal .sg-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sinyal .sg-cat{flex:1 1 100%;margin:0}
+.sinyal a{color:inherit;text-decoration:underline;cursor:pointer}
 .alertbox{border:1px solid var(--line);border-left-width:5px;border-radius:6px;padding:8px 10px;margin:8px 0;font-size:14px}
 .alertbox.good{border-color:var(--good);background:var(--good-bg)}
 .alertbox.bad{border-color:var(--bad);background:var(--bad-bg)}
@@ -153,6 +165,16 @@ tr.sel{background:var(--bg)}
   </div>
 
   <div id="appView" hidden>
+  <div class="sinyal" id="sinyalBar" role="status" aria-live="polite" hidden>
+    <div class="sg-isi" id="sgIsi"></div>
+    <div class="sg-ctl">
+      <button type="button" id="sgLihat">Lihat</button>
+      <button type="button" id="sgOk">Sudah saya lihat</button>
+      <label class="chk"><input type="checkbox" id="sgKedip" checked> Kedip</label>
+      <label class="chk"><input type="checkbox" id="sgBunyi" checked> Bunyi</label>
+    </div>
+    <div class="note sg-cat" id="sgCat">Sinyal teknikal robot, bukan ajakan membeli. Cek rencana trade, stop loss, dan kondisi pasar dulu. Penanda ini hanya bekerja selama halaman terbuka; untuk di luar halaman, aktifkan Notifikasi HP (Telegram).</div>
+  </div>
   <div class="card">
     <div class="acct">
       <div><span class="who" id="whoNama"></span><span class="chip" id="whoPeran"></span><div class="note" id="whoEmail"></div></div>
@@ -817,6 +839,7 @@ function keluarLokal(pesan){
   SES.token = ''; SES.user = null; simpanSesi('');
   S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = '';
   if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
+  try { $('#sinyalBar').hidden = true; sinyalJudul(false); SINYAL.html = ''; SINYAL.uid = null; } catch (e) {}
   $('#adminCard').hidden = true; $('#pwCard').hidden = true; $('#notifCard').hidden = true; notifBerhenti(); S.jurnal = []; JR.sigOpen = ''; JR.tutupId = null; $('#jrCard').hidden = true;
   renderAll(); tampil(false);
   $('#authErr').textContent = pesan || ''; $('#mSandi').value = ''; $('#dSandi').value = '';
@@ -854,6 +877,11 @@ $('#btnKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {
 
 /* ===================== PERBARUI DATA PASAR (SEMUA PENGGUNA) ===================== */
 let kbSegarBusy = false;
+// Memuat ulang watchlist dari server tanpa mengubah saham yang sedang dipilih (dipakai setelah tombol perbarui, supaya tidak perlu menekan F5).
+async function muatUlangWatchlist(){
+  if (!apiSiap() || !SES.token) return;
+  try { const j = await apiGet({}); const sel = S.sel; terapkanData(j); if (sel && S.stocks[sel]) { S.sel = sel; renderAll(); } } catch (e) {}
+}
 async function perbaruiDataPasar(){
   if (kbSegarBusy || !SES.token) return;
   const msg = t => { const e = $('#kbSegarMsg'); if (e) e.textContent = t || ''; }, tb = $('#kbSegar');
@@ -868,6 +896,7 @@ async function perbaruiDataPasar(){
         ? 'Data pasar sudah baru (maksimal ' + (j.jeda || 30) + ' menit pada jam bursa). Tidak ada yang perlu diperbarui.'
         : n + ' saham diperbarui' + (g.gagal.length ? ', ' + g.gagal.length + ' gagal (' + g.gagal.slice(0, 4).map(x => x.kode).join(', ') + ')' : '') + (g.sisa ? ', ' + g.sisa + ' belum sempat: tekan lagi' : '') + '.');
       PASAR.busy = false; await muatPasar();
+      if (n > 0) { await muatUlangWatchlist(); msg($('#kbSegarMsg').textContent + ' Tampilan sudah dimuat ulang.'); }
     }
   } catch (e) { msg(e.message); }
   kbSegarBusy = false; tb.disabled = false;
@@ -1160,7 +1189,7 @@ $('#adminBody').addEventListener('click', async e => {
     if (a === 'aktif') { await api('setAktif', {id: b.dataset.id, aktif: b.dataset.on === '1'}); return muatAdmin(); }
     if (a === 'hapus') { await api('hapusPengguna', {id: b.dataset.id}); return muatAdmin(); }
     if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara + ' (sampaikan ke yang bersangkutan; minta segera diganti).'); return; }
-    if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); const g0 = j.segar; pesan(g0.ok.length + g0.gagal.length + g0.sisa === 0 ? 'Semua data sudah baru, tidak ada yang perlu diperbarui.' : 'Selesai: ' + g0.ok.length + ' berhasil, ' + g0.gagal.length + ' gagal, ' + g0.sisa + ' belum sempat (tekan lagi).'); }
+    if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); const g0 = j.segar; pesan(g0.ok.length + g0.gagal.length + g0.sisa === 0 ? 'Semua data sudah baru, tidak ada yang perlu diperbarui.' : 'Selesai: ' + g0.ok.length + ' berhasil, ' + g0.gagal.length + ' gagal, ' + g0.sisa + ' belum sempat (tekan lagi).'); if (g0.ok.length) { muatUlangWatchlist(); PASAR.busy = false; muatPasar(); } }
   } catch (err) { pesan(err.message); }
 });
 
@@ -1522,6 +1551,7 @@ function cekAlert(k){
   const first = LIVE.lastAlert[k] == null; LIVE.lastAlert[k] = key;
   if (first && key === 'ok') return;
   if (key !== 'ok') { beep(); notif(k + ' ' + fmtP(L.price), s.t.replace(/^\S+\s/, '')); }
+  try { perbaruiSinyal(); } catch (e) {}
 }
 function fmtJam(t){ return t ? t.slice(11, 16) : '–'; }
 
@@ -1685,6 +1715,103 @@ function ringkasan(st, pos, price){
   return t;
 }
 
+/* ===================== penanda sinyal beli (kedip) ===================== */
+const SINYAL = {dilihat: {}, uid: null, kedip: true, bunyi: true, judulAsli: document.title, tJudul: null, lastBeep: 0, umum: {}, html: '', kunciSemua: []};
+(function(){
+  try {
+    const o = JSON.parse(localStorage.getItem('rs_sinyal_pref') || 'null');
+    if (o) { if (typeof o.kedip === 'boolean') SINYAL.kedip = o.kedip; if (typeof o.bunyi === 'boolean') SINYAL.bunyi = o.bunyi; }
+    else if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) SINYAL.kedip = false;
+  } catch (e) {}
+})();
+function sinyalSimpanPref(){ try { localStorage.setItem('rs_sinyal_pref', JSON.stringify({kedip: SINYAL.kedip, bunyi: SINYAL.bunyi})); } catch (e) {} }
+function sinyalHari(){ return wibNow().toISOString().slice(0, 10); }
+function sinyalMuatDilihat(){
+  const uid = (SES.user && SES.user.email) || '', hari = sinyalHari();
+  if (SINYAL.uid === uid + '|' + hari) return;
+  SINYAL.uid = uid + '|' + hari; SINYAL.dilihat = {}; SINYAL.umum = {};
+  try { const d = JSON.parse(localStorage.getItem('rs_sinyal_dilihat') || 'null'); if (d && d.uid === SINYAL.uid) SINYAL.dilihat = d.k || {}; } catch (e) {}
+}
+function sinyalSimpanDilihat(){ try { localStorage.setItem('rs_sinyal_dilihat', JSON.stringify({uid: SINYAL.uid, k: SINYAL.dilihat})); } catch (e) {} }
+// Sinyal beli: lolos aturan kandidat (skor >= batas, likuid, RSI tidak panas) DAN bisa dibeli sesuai modal & anggaran risiko; saham yang sudah dipegang tidak dihitung.
+function sinyalBeli(){
+  const th0 = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25, K = kondisiPasar();
+  const th = (KB.pasar && K && K.level === 'lemah') ? th0 + 15 : th0, out = {};
+  const tambah = (st, dari) => {
+    if (out[st.name] || (S.pos && posValid(S.pos[st.name]))) return;
+    const sc = lastScore(st), pe = peluang(st), pl = plan(st.d, st.I, S.cfg);
+    if (!sc || !pe || !pl) return;
+    if (sc.total >= th && pe.avgVal >= 1e9 && pe.rs <= 75 && pl.lots >= 1) out[st.name] = {k: st.name, skor: sc.total, lots: pl.lots, cost: pl.cost, harga: pe.price, dari};
+  };
+  Object.values(S.stocks).forEach(st => tambah(st, 'watchlist'));
+  PASAR.st.forEach(st => tambah(st, 'pasar'));
+  return Object.values(out).sort((a, b) => b.skor - a.skor);
+}
+// Posisi yang sedang dipegang dan menyentuh stop / target (memakai harga live bila ada)
+function sinyalPosisi(){
+  const out = [];
+  Object.keys(S.stocks).forEach(k => {
+    const L = LIVE.data[k], o = S.stocks[k], pos = S.pos && S.pos[k];
+    if (!L || !o || !posValid(pos)) return;
+    const s = statusPos(L.price, posLevels(o, pos));
+    if (s.code === 'stop' || s.code === 'target') out.push({k, code: s.code, harga: L.price});
+  });
+  return out;
+}
+function sinyalJudul(on, teks){
+  if (SINYAL.tJudul) { clearInterval(SINYAL.tJudul); SINYAL.tJudul = null; }
+  document.title = SINYAL.judulAsli;
+  if (!on || !document.hidden) return;
+  let t = false;
+  SINYAL.tJudul = setInterval(() => { t = !t; document.title = t ? teks : SINYAL.judulAsli; }, 1500);
+}
+function perbaruiSinyal(){
+  const bar = $('#sinyalBar'); if (!bar) return;
+  if (!SES.token) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; return; }
+  sinyalMuatDilihat();
+  const beli = sinyalBeli(), pos = sinyalPosisi();
+  const semua = pos.map(x => ({k: x.k, key: x.k + ':' + x.code})).concat(beli.map(x => ({k: x.k, key: x.k + ':beli'})));
+  SINYAL.kunciSemua = semua.map(x => x.key);
+  if (!semua.length) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; return; }
+  const baru = semua.filter(x => !SINYAL.dilihat[x.key]);
+  const adaStop = pos.some(x => x.code === 'stop');
+  let h = '';
+  pos.forEach(x => { h += `<span class="sg-item ${x.code === 'stop' ? 'neg' : 'pos'}"><b>${x.code === 'stop' ? '⛔' : '🎯'} ${esc(x.k)}</b> ${x.code === 'stop' ? 'menyentuh stop' : 'mencapai target'} (${fmtP(x.harga)})</span>`; });
+  if (beli.length) h += '<span class="sg-item"><b>🔔 Sinyal beli:</b> ' + beli.slice(0, 6).map(x => `<a data-sg="${esc(x.k)}"><b>${esc(x.k)}</b></a> (skor ${x.skor >= 0 ? '+' : ''}${x.skor.toFixed(0)}, ${x.lots} lot${x.dari === 'watchlist' ? ', watchlist' : ''})`).join(', ') + (beli.length > 6 ? ' +' + (beli.length - 6) + ' lainnya' : '') + '</span>';
+  const K = kondisiPasar();
+  if (beli.length && K && K.level === 'lemah') h += '<span class="sg-item" style="color:var(--warn)">⚠ Pasar sedang lemah</span>';
+  if (!baru.length) h += '<span class="note">(sudah Anda lihat)</span>';
+  const cls = 'sinyal' + (adaStop ? ' bad' : '') + (baru.length ? ' baru' : '') + (baru.length && SINYAL.kedip ? ' kedip' : '');
+  if (bar.className !== cls) bar.className = cls;
+  if (h !== SINYAL.html) { $('#sgIsi').innerHTML = h; SINYAL.html = h; }
+  bar.hidden = false;
+  $('#sgOk').disabled = !baru.length;
+  $('#sgKedip').checked = SINYAL.kedip; $('#sgBunyi').checked = SINYAL.bunyi;
+  // pengumuman sekali per sinyal baru: bunyi, notifikasi browser (bila tab tidak aktif), judul tab berkedip
+  const belumUmum = baru.filter(x => !SINYAL.umum[x.key]);
+  if (belumUmum.length) {
+    belumUmum.forEach(x => { SINYAL.umum[x.key] = true; });
+    if (SINYAL.bunyi && Date.now() - SINYAL.lastBeep > 60000) { SINYAL.lastBeep = Date.now(); beep(); }
+    if (document.hidden) notif('Robot Saham: ' + (adaStop ? 'posisi menyentuh stop' : 'sinyal beli'), belumUmum.map(x => x.k).join(', '));
+  }
+  const teks = adaStop ? '⛔ ' + pos.filter(x => x.code === 'stop').map(x => x.k).join(', ') + ' kena stop' : '🔔 Sinyal beli: ' + beli.map(x => x.k).slice(0, 3).join(', ');
+  sinyalJudul(baru.length > 0 && SINYAL.kedip, teks);
+}
+(function(){
+  const bar = document.getElementById('sinyalBar'); if (!bar) return;
+  document.getElementById('sgOk').onclick = () => { SINYAL.kunciSemua.forEach(k => { SINYAL.dilihat[k] = 1; }); sinyalSimpanDilihat(); perbaruiSinyal(); };
+  document.getElementById('sgKedip').onchange = e => { SINYAL.kedip = e.target.checked; sinyalSimpanPref(); perbaruiSinyal(); };
+  document.getElementById('sgBunyi').onchange = e => { SINYAL.bunyi = e.target.checked; sinyalSimpanPref(); if (SINYAL.bunyi) beep(); };
+  document.getElementById('sgLihat').onclick = () => { const e = document.getElementById('kbCard'); if (e) window.scrollTo({top: e.offsetTop - 70, behavior: 'smooth'}); };
+  bar.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[data-sg]'); if (!a) return;
+    e.preventDefault(); const k = a.dataset.sg;
+    if (S.stocks[k]) { S.sel = k; renderAll(); const d = $('#detail'); if (d) window.scrollTo({top: d.offsetTop - 70, behavior: 'smooth'}); }
+    else { const c = document.getElementById('kbCard'); if (c) window.scrollTo({top: c.offsetTop - 70, behavior: 'smooth'}); }
+  });
+  document.addEventListener('visibilitychange', () => { if (SES.token) perbaruiSinyal(); });
+})();
+
 /* ===================== kandidat beli (pindai pasar) ===================== */
 const PASAR = {st: [], menunggu: [], total: 0, updated: '', busy: false, loaded: false, err: ''};
 const KB = {terjangkau: false, pasar: true, thPakai: 25, thDasar: 25};
@@ -1758,7 +1885,7 @@ function barisKB(r){
   const {st, sc, pe, pl} = r, k = st.name, ada = !!S.stocks[k];
   const rugi1 = r.rugi1, butuh = fmtP(Math.ceil(r.modalButuh / 1000) * 1000);
   const lot = pl.lots > 0 ? `<b>${pl.lots} lot</b><br><span class="note">Rp ${fmtP(pl.cost)}</span>`
-    : (pl.byCash >= 1 ? `<b style="color:var(--warn)">Pantau saja</b><br>1 lot = Rp ${fmtP(pl.e * 100)}, tetapi melebihi anggaran risiko (rugi bila kena stop ≈ Rp ${fmtP(rugi1)}).<br><span class="note">Butuh modal ± Rp ${butuh}</span>`
+    : (pl.byCash >= 1 ? `<b style="color:var(--warn)">Pantau saja</b><br>1 lot = Rp ${fmtP(pl.e * 100)}, tetapi melebihi anggaran risiko (rugi bila kena stop ≈ Rp ${fmtP(rugi1)}).<br><span class="note">Agar sesuai batas risiko ${S.cfg.riskPct}% butuh modal ± Rp ${butuh}</span>`
       : `<b style="color:var(--warn)">Pantau saja</b><br>1 lot = Rp ${fmtP(pl.e * 100)}, melebihi modal.<br><span class="note">Butuh modal ± Rp ${butuh}</span>`);
   const cat = pe.why.slice(0, 3).map(esc).join('; ') + (pe.warn.length ? '<br><span style="color:var(--warn)">⚠ ' + pe.warn.map(esc).join('; ') + '</span>' : '');
   return `<tr><td><b>${esc(k)}</b>${ada ? '<br><span class="note">di watchlist</span>' : ''}</td><td class="num">${fmtP(pe.price)}</td>
@@ -1771,7 +1898,9 @@ function barisRank(r, i){
   const {st, sc, pe, pl} = r, k = st.name, ada = !!S.stocks[k], po = r.pola;
   const [t, c] = r.pot >= 65 ? ['Potensi kuat', 'good'] : r.pot >= 50 ? ['Layak dipantau', 'warn'] : ['Lemah', 'bad'];
   const stat = pl.lots > 0 ? `<b>Bisa dibeli</b><br><span class="note">${pl.lots} lot, Rp ${fmtP(pl.cost)}</span>`
-    : `<b style="color:var(--warn)">Pantau saja</b><br><span class="note">butuh modal ± Rp ${fmtP(Math.ceil(r.modalButuh / 1000) * 1000)}</span>`;
+    : (pl.byCash >= 1
+      ? `<b style="color:var(--warn)">Pantau saja</b><br><span class="note">1 lot Rp ${fmtP(pl.e * 100)} muat di modal, tetapi bila kena stop rugi ≈ Rp ${fmtP(r.rugi1)} (${(r.rugi1 / (S.cfg.cap || 1) * 100).toFixed(1).replace('.', ',')}% modal), lebih besar dari batas risiko ${S.cfg.riskPct}%. Agar sesuai aturan itu butuh modal ± Rp ${fmtP(Math.ceil(r.modalButuh / 1000) * 1000)}.</span>`
+      : `<b style="color:var(--warn)">Pantau saja</b><br><span class="note">1 lot Rp ${fmtP(pl.e * 100)} melebihi modal. Butuh modal ± Rp ${fmtP(Math.ceil(r.modalButuh / 1000) * 1000)}.</span>`);
   const al = po.why.concat(pe.why).slice(0, 3).map(esc).join('; ') + (po.warn.concat(pe.warn).length ? '<br><span style="color:var(--warn)">⚠ ' + po.warn.concat(pe.warn).map(esc).join('; ') + '</span>' : '');
   return `<tr><td class="num">${i + 1}</td><td><b>${esc(k)}</b>${ada ? '<br><span class="note">di watchlist</span>' : ''}</td><td class="num">${fmtP(pe.price)}</td>
     <td class="num ${pe.chg1 >= 0 ? 'pos' : 'neg'}">${fmtPct(pe.chg1, 1)}</td><td class="num ${r.ret20 == null ? '' : r.ret20 >= 0 ? 'pos' : 'neg'}">${r.ret20 == null ? '–' : fmtPct(Math.abs(r.ret20) < 0.005 ? 0 : r.ret20, 0)}</td>
@@ -1781,6 +1910,7 @@ function barisRank(r, i){
     <td><button type="button" data-kb="${esc(k)}" data-ada="${ada ? 1 : 0}">${ada ? 'Buka' : 'Tambah'}</button></td></tr>`;
 }
 function renderKB(){
+  try { perbaruiSinyal(); } catch (e) {}
   renderPasar();
   const card = $('#kbCard'); if (!card) return;
   card.hidden = !SES.token; if (!SES.token) return;
