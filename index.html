@@ -282,6 +282,7 @@ tr.sel{background:var(--bg)}
       <label class="chk"><input type="checkbox" id="kbPasar" checked> Perketat syarat saat pasar lemah (skor minimal +15)</label>
       <button id="kbMuat">Pindai ulang</button>
       <button id="kbSegar">Perbarui data pasar</button>
+      <button id="kbCoba" title="Menampilkan contoh penanda sinyal beli berkedip selama 8 detik (bukan sinyal sungguhan)">Coba penanda kedip</button>
     </div>
     <div class="note" id="kbSegarMsg" style="margin:6px 0 0" role="status" aria-live="polite"></div>
     <p class="note">Alat edukasi, bukan saran investasi. "Kandidat" berarti lolos aturan teknikal robot (skor ≥ batas masuk, likuid, RSI tidak terlalu panas), bukan ramalan harga naik. Cek sendiri berita, kinerja perusahaan, dan hasil backtest sebelum memutuskan, dan tetap pasang stop.</p>
@@ -1716,7 +1717,7 @@ function ringkasan(st, pos, price){
 }
 
 /* ===================== penanda sinyal beli (kedip) ===================== */
-const SINYAL = {dilihat: {}, uid: null, kedip: true, bunyi: true, judulAsli: document.title, tJudul: null, lastBeep: 0, umum: {}, html: '', kunciSemua: []};
+const SINYAL = {dilihat: {}, uid: null, kedip: true, bunyi: true, judulAsli: document.title, tJudul: null, lastBeep: 0, umum: {}, html: '', kunciSemua: [], demoSampai: 0};
 (function(){
   try {
     const o = JSON.parse(localStorage.getItem('rs_sinyal_pref') || 'null');
@@ -1765,8 +1766,20 @@ function sinyalJudul(on, teks){
   let t = false;
   SINYAL.tJudul = setInterval(() => { t = !t; document.title = t ? teks : SINYAL.judulAsli; }, 1500);
 }
+function sinyalCoba(){
+  const bar = $('#sinyalBar'); if (!bar || !SES.token) return;
+  SINYAL.demoSampai = Date.now() + 8000;
+  bar.className = 'sinyal baru kedip'; bar.hidden = false;
+  $('#sgIsi').innerHTML = '<span class="sg-item"><b>🔔 PERCOBAAN:</b> beginilah tampilan sinyal beli. Ini contoh, bukan saham sungguhan. Berakhir dalam 8 detik.</span>';
+  SINYAL.html = '';
+  $('#sgOk').disabled = true; $('#sgKedip').checked = SINYAL.kedip; $('#sgBunyi').checked = SINYAL.bunyi;
+  if (SINYAL.bunyi) beep();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+  setTimeout(() => { if (Date.now() >= SINYAL.demoSampai) { SINYAL.demoSampai = 0; SINYAL.html = ''; try { perbaruiSinyal(); } catch (e) {} } }, 8200);
+}
 function perbaruiSinyal(){
   const bar = $('#sinyalBar'); if (!bar) return;
+  if (SINYAL.demoSampai > Date.now()) return;
   if (!SES.token) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; return; }
   sinyalMuatDilihat();
   const beli = sinyalBeli(), pos = sinyalPosisi();
@@ -1799,6 +1812,7 @@ function perbaruiSinyal(){
 }
 (function(){
   const bar = document.getElementById('sinyalBar'); if (!bar) return;
+  const kc = document.getElementById('kbCoba'); if (kc) kc.onclick = sinyalCoba;
   document.getElementById('sgOk').onclick = () => { SINYAL.kunciSemua.forEach(k => { SINYAL.dilihat[k] = 1; }); sinyalSimpanDilihat(); perbaruiSinyal(); };
   document.getElementById('sgKedip').onchange = e => { SINYAL.kedip = e.target.checked; sinyalSimpanPref(); perbaruiSinyal(); };
   document.getElementById('sgBunyi').onchange = e => { SINYAL.bunyi = e.target.checked; sinyalSimpanPref(); if (SINYAL.bunyi) beep(); };
