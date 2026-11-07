@@ -84,6 +84,10 @@ tr.sel{background:var(--bg)}
 .pill.on{border-color:var(--good);color:var(--ink);background:var(--good-bg)}
 .sinyal{--gl:var(--good);position:sticky;top:0;z-index:40;margin:0 0 10px;padding:8px 12px;border:1px solid var(--good);border-left-width:6px;border-radius:8px;background:var(--good-bg);font-size:14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
 .sinyal[hidden]{display:none}
+.siaga{margin:0 0 10px;padding:8px 12px;border:1px solid var(--line,#ccc);border-radius:8px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px}
+.siaga.on{border-color:var(--good);background:var(--good-bg)}
+.siaga select{font:inherit}
+.siaga .note{flex:1 1 100%;margin:0}
 .sinyal.bad{--gl:var(--bad);border-color:var(--bad);background:var(--bad-bg)}
 .sinyal.baru{box-shadow:0 0 0 2px var(--gl)}
 .sinyal.kedip{animation:sgKedip 1.4s ease-in-out infinite}
@@ -174,6 +178,12 @@ tr.sel{background:var(--bg)}
       <label class="chk"><input type="checkbox" id="sgBunyi" checked> Bunyi</label>
     </div>
     <div class="note sg-cat" id="sgCat">Sinyal teknikal robot, bukan ajakan membeli. Cek rencana trade, stop loss, dan kondisi pasar dulu. Penanda ini hanya bekerja selama halaman terbuka; untuk di luar halaman, aktifkan Notifikasi HP (Telegram).</div>
+  </div>
+  <div class="siaga" id="siagaBar">
+    <button type="button" id="sgSiaga">🛡 Aktifkan mode siaga</button>
+    <button type="button" id="sgTes">🔊 Tes suara</button>
+    <label>Volume <select id="sgVol"><option value="normal">Normal</option><option value="keras" selected>Keras</option><option value="maks">Sangat keras</option></select></label>
+    <span class="note" id="siagaCat">Mode siaga: layar tetap menyala, halaman terus memeriksa harga, dan alarm berbunyi keras berulang sampai Anda menekan "Sudah saya lihat". Biarkan halaman ini terbuka. Naikkan juga volume media di HP/tablet Anda.</span>
   </div>
   <div class="card">
     <div class="acct">
@@ -837,6 +847,7 @@ function tampilUser(u){
 }
 function simpanSesi(t){ try { if (t) localStorage.setItem('rsm_tok', t); else localStorage.removeItem('rsm_tok'); } catch (e) {} }
 function keluarLokal(pesan){
+  try { if (typeof siagaMati === 'function' && SIAGA.on) siagaMati(); } catch (e) {}
   SES.token = ''; SES.user = null; simpanSesi('');
   S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = '';
   if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
@@ -1473,6 +1484,8 @@ function renderPeluang(){
 }
 
 /* ===================== harga live, posisi, notifikasi ===================== */
+const SIAGA = {on: false, vol: 'keras', lock: null, ctx: null, diam: null, tDetak: null, tData: null, tAlarm: null, alarmSampai: 0, mulai: 0};
+const VOLUME = {normal: 0.35, keras: 0.8, maks: 1};
 const LIVE = {auto: true, sec: 120, timer: null, busy: false, data: {}, err: '', lastAlert: {}};
 let TVOPEN = null;
 function wibNow(){ return new Date(Date.now() + 7 * 3600e3); }
@@ -1534,12 +1547,33 @@ function statusPos(price, lv){
   if (lv.tp && price >= lv.tp * 0.99) return {code: 'neart', cls: 'warn', t: '⚠ Harga dekat target (selisih < 1%).'};
   return {code: 'ok', cls: 'good', t: '✔ Masih di antara stop dan target.'};
 }
+function audioCtx(){
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    if (!SIAGA.ctx) SIAGA.ctx = new AC();
+    if (SIAGA.ctx.state === 'suspended') SIAGA.ctx.resume();
+    return SIAGA.ctx;
+  } catch (e) { return null; }
+}
+// Alarm keras: 6 denyut gelombang kotak bergantian 1000/1500 Hz (mirip sirine), + getar bila didukung
 function beep(){
   try {
-    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    const ac = new AC();
-    [0, 0.3].forEach(t0 => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; o.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(0.15, ac.currentTime + t0); o.start(ac.currentTime + t0); o.stop(ac.currentTime + t0 + 0.2); });
+    const ac = audioCtx(); if (!ac) return;
+    const master = ac.createGain(); master.gain.value = VOLUME[SIAGA.vol] || 0.8; master.connect(ac.destination);
+    const t0 = ac.currentTime + 0.03;
+    for (let i = 0; i < 6; i++) {
+      const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * 0.24;
+      o.type = 'square'; o.frequency.value = i % 2 ? 1500 : 1000;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + 0.01); g.gain.setValueAtTime(1, t + 0.19); g.gain.linearRampToValueAtTime(0, t + 0.22);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.23);
+    }
+    if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
   } catch (e) {}
+}
+function alarmStop(){ if (SIAGA.tAlarm) { clearInterval(SIAGA.tAlarm); SIAGA.tAlarm = null; } }
+function alarmMulai(){
+  alarmStop(); SIAGA.alarmSampai = Date.now() + 180000; beep();
+  SIAGA.tAlarm = setInterval(() => { if (Date.now() > SIAGA.alarmSampai) { alarmStop(); return; } beep(); }, 6000);
 }
 function notif(judul, isi){
   try { if ('Notification' in window && Notification.permission === 'granted') new Notification(judul, {body: isi}); } catch (e) {}
@@ -1721,11 +1755,11 @@ const SINYAL = {dilihat: {}, uid: null, kedip: true, bunyi: true, judulAsli: doc
 (function(){
   try {
     const o = JSON.parse(localStorage.getItem('rs_sinyal_pref') || 'null');
-    if (o) { if (typeof o.kedip === 'boolean') SINYAL.kedip = o.kedip; if (typeof o.bunyi === 'boolean') SINYAL.bunyi = o.bunyi; }
+    if (o) { if (typeof o.kedip === 'boolean') SINYAL.kedip = o.kedip; if (typeof o.bunyi === 'boolean') SINYAL.bunyi = o.bunyi; if (VOLUME[o.vol]) SIAGA.vol = o.vol; }
     else if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) SINYAL.kedip = false;
   } catch (e) {}
 })();
-function sinyalSimpanPref(){ try { localStorage.setItem('rs_sinyal_pref', JSON.stringify({kedip: SINYAL.kedip, bunyi: SINYAL.bunyi})); } catch (e) {} }
+function sinyalSimpanPref(){ try { localStorage.setItem('rs_sinyal_pref', JSON.stringify({kedip: SINYAL.kedip, bunyi: SINYAL.bunyi, vol: SIAGA.vol})); } catch (e) {} }
 function sinyalHari(){ return wibNow().toISOString().slice(0, 10); }
 function sinyalMuatDilihat(){
   const uid = (SES.user && SES.user.email) || '', hari = sinyalHari();
@@ -1780,13 +1814,14 @@ function sinyalCoba(){
 function perbaruiSinyal(){
   const bar = $('#sinyalBar'); if (!bar) return;
   if (SINYAL.demoSampai > Date.now()) return;
-  if (!SES.token) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; return; }
+  if (!SES.token) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; alarmStop(); return; }
   sinyalMuatDilihat();
   const beli = sinyalBeli(), pos = sinyalPosisi();
   const semua = pos.map(x => ({k: x.k, key: x.k + ':' + x.code})).concat(beli.map(x => ({k: x.k, key: x.k + ':beli'})));
   SINYAL.kunciSemua = semua.map(x => x.key);
-  if (!semua.length) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; return; }
+  if (!semua.length) { bar.hidden = true; sinyalJudul(false); SINYAL.html = ''; alarmStop(); return; }
   const baru = semua.filter(x => !SINYAL.dilihat[x.key]);
+  if (!baru.length || !SINYAL.bunyi) alarmStop();
   const adaStop = pos.some(x => x.code === 'stop');
   let h = '';
   pos.forEach(x => { h += `<span class="sg-item ${x.code === 'stop' ? 'neg' : 'pos'}"><b>${x.code === 'stop' ? '⛔' : '🎯'} ${esc(x.k)}</b> ${x.code === 'stop' ? 'menyentuh stop' : 'mencapai target'} (${fmtP(x.harga)})</span>`; });
@@ -1804,7 +1839,7 @@ function perbaruiSinyal(){
   const belumUmum = baru.filter(x => !SINYAL.umum[x.key]);
   if (belumUmum.length) {
     belumUmum.forEach(x => { SINYAL.umum[x.key] = true; });
-    if (SINYAL.bunyi && Date.now() - SINYAL.lastBeep > 60000) { SINYAL.lastBeep = Date.now(); beep(); }
+    if (SINYAL.bunyi) { if (SIAGA.on) alarmMulai(); else if (Date.now() - SINYAL.lastBeep > 60000) { SINYAL.lastBeep = Date.now(); beep(); } }
     if (document.hidden) notif('Robot Saham: ' + (adaStop ? 'posisi menyentuh stop' : 'sinyal beli'), belumUmum.map(x => x.k).join(', '));
   }
   const teks = adaStop ? '⛔ ' + pos.filter(x => x.code === 'stop').map(x => x.k).join(', ') + ' kena stop' : '🔔 Sinyal beli: ' + beli.map(x => x.k).slice(0, 3).join(', ');
@@ -1813,7 +1848,7 @@ function perbaruiSinyal(){
 (function(){
   const bar = document.getElementById('sinyalBar'); if (!bar) return;
   const kc = document.getElementById('kbCoba'); if (kc) kc.onclick = sinyalCoba;
-  document.getElementById('sgOk').onclick = () => { SINYAL.kunciSemua.forEach(k => { SINYAL.dilihat[k] = 1; }); sinyalSimpanDilihat(); perbaruiSinyal(); };
+  document.getElementById('sgOk').onclick = () => { SINYAL.kunciSemua.forEach(k => { SINYAL.dilihat[k] = 1; }); sinyalSimpanDilihat(); alarmStop(); perbaruiSinyal(); };
   document.getElementById('sgKedip').onchange = e => { SINYAL.kedip = e.target.checked; sinyalSimpanPref(); perbaruiSinyal(); };
   document.getElementById('sgBunyi').onchange = e => { SINYAL.bunyi = e.target.checked; sinyalSimpanPref(); if (SINYAL.bunyi) beep(); };
   document.getElementById('sgLihat').onclick = () => { const e = document.getElementById('kbCard'); if (e) window.scrollTo({top: e.offsetTop - 70, behavior: 'smooth'}); };
@@ -1824,6 +1859,43 @@ function perbaruiSinyal(){
     else { const c = document.getElementById('kbCard'); if (c) window.scrollTo({top: c.offsetTop - 70, behavior: 'smooth'}); }
   });
   document.addEventListener('visibilitychange', () => { if (SES.token) perbaruiSinyal(); });
+})();
+
+/* ===================== mode siaga ===================== */
+async function siagaKunci(){
+  try { if (navigator.wakeLock && !document.hidden && !SIAGA.lock) { SIAGA.lock = await navigator.wakeLock.request('screen'); SIAGA.lock.addEventListener('release', () => { SIAGA.lock = null; }); } } catch (e) {}
+}
+function siagaTampil(){
+  const b = document.getElementById('sgSiaga'), bar = document.getElementById('siagaBar'); if (!b) return;
+  b.textContent = SIAGA.on ? '🛡 Mode siaga AKTIF (tekan untuk mematikan)' : '🛡 Aktifkan mode siaga';
+  bar.classList.toggle('on', SIAGA.on);
+}
+async function siagaNyala(){
+  const ac = audioCtx();
+  if (ac && !SIAGA.diam) { try { const o = ac.createOscillator(), g = ac.createGain(); g.gain.value = 0.0001; o.frequency.value = 40; o.connect(g); g.connect(ac.destination); o.start(); SIAGA.diam = o; } catch (e) {} }
+  await siagaKunci();
+  try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  SIAGA.on = true; SIAGA.mulai = Date.now();
+  SIAGA.tDetak = setInterval(() => { siagaKunci(); try { perbaruiSinyal(); } catch (e) {} }, 30000);
+  SIAGA.tData = setInterval(() => { muatUlangWatchlist(); muatPasar(); }, 600000);
+  siagaTampil(); try { jadwalLive(); } catch (e) {}
+  beep();
+}
+function siagaMati(){
+  SIAGA.on = false; alarmStop();
+  clearInterval(SIAGA.tDetak); clearInterval(SIAGA.tData); SIAGA.tDetak = SIAGA.tData = null;
+  try { if (SIAGA.diam) SIAGA.diam.stop(); } catch (e) {} SIAGA.diam = null;
+  try { if (SIAGA.lock) SIAGA.lock.release(); } catch (e) {} SIAGA.lock = null;
+  siagaTampil();
+}
+(function(){
+  const b = document.getElementById('sgSiaga'); if (!b) return;
+  b.onclick = () => { SIAGA.on ? siagaMati() : siagaNyala(); };
+  document.getElementById('sgTes').onclick = () => beep();
+  const v = document.getElementById('sgVol'); v.value = SIAGA.vol;
+  v.onchange = () => { SIAGA.vol = v.value; sinyalSimpanPref(); beep(); };
+  document.addEventListener('click', () => { if (SIAGA.ctx && SIAGA.ctx.state === 'suspended') SIAGA.ctx.resume(); }, true);
+  document.addEventListener('visibilitychange', () => { if (SIAGA.on && !document.hidden) siagaKunci(); });
 })();
 
 /* ===================== kandidat beli (pindai pasar) ===================== */
@@ -2086,7 +2158,7 @@ async function ambilLive(manual){
 }
 function jadwalLive(){
   clearTimeout(LIVE.timer);
-  if (!LIVE.auto || !kodePantau().length || document.hidden || !pasarBuka()) return;
+  if (!LIVE.auto || !kodePantau().length || (document.hidden && !SIAGA.on) || !pasarBuka()) return;
   LIVE.timer = setTimeout(() => ambilLive(), LIVE.sec * 1000);
 }
 function segarkanLive(paksa){
@@ -2095,7 +2167,7 @@ function segarkanLive(paksa){
   else jadwalLive();
 }
 (function(){ const b = document.getElementById('monNow'); if (b) b.onclick = () => ambilLive(true); })();
-document.addEventListener('visibilitychange', () => { if (document.hidden) clearTimeout(LIVE.timer); else segarkanLive(false); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && !SIAGA.on) clearTimeout(LIVE.timer); else segarkanLive(false); });
 
 function muatTV(kode){
   TVOPEN = kode;
