@@ -956,21 +956,23 @@ function renderNotif(){
     '<div class="row" style="gap:10px;flex-wrap:wrap;align-items:end;margin-top:10px"><b>Sinyal ke Telegram:</b>' +
     '<label><input type="checkbox" id="nSBeli"> Potensi beli</label>' +
     '<label><input type="checkbox" id="nSTurun"> Waspada turun tajam</label>' +
+    '<label><input type="checkbox" id="nLapor"> Laporan harian 18:00</label>' +
     '<label>Ulangi tiap <select id="nUlang"><option value="0">tidak diulang</option><option value="15">15 menit</option><option value="30">30 menit</option><option value="60">1 jam</option><option value="120">2 jam</option></select></label>' +
     '<label>Maksimal <select id="nMaks"><option>2</option><option>3</option><option>6</option><option>10</option><option>20</option></select> kali/hari per saham</label></div>' +
-    '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button id="nTes">Kirim pesan tes</button><button id="nSekarang">Kirim ringkasan sinyal sekarang</button><button id="nBerhenti">Hentikan pengingat hari ini</button><button id="nPutus">Putuskan Telegram</button></div>' +
+    '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap"><button id="nTes">Kirim pesan tes</button><button id="nSekarang">Kirim ringkasan sinyal sekarang</button><button id="nLaporan">Kirim laporan harian sekarang</button><button id="nBerhenti">Hentikan pengingat hari ini</button><button id="nPutus">Putuskan Telegram</button></div>' +
     '<div class="note" id="notifMsg" style="margin-top:6px"></div>' +
     '<p class="note">Peringatan juga dikirim otomatis bila harga menyentuh <b>Stop</b> atau mencapai <b>Target</b> yang Anda isi di kotak posisi (dan saat harga tinggal 1% dari stop). Isi 0 untuk mematikan batas persen. Tiap jenis peringatan dikirim sekali per hari per saham. Harga tertunda sekitar 15-20 menit dan hanya dicek pada jam bursa; ini bukan pengganti order stop di sekuritas. Alat bantu edukasi, bukan saran investasi.</p>';
   $('#nAktif').checked = n.aktif; $('#nUntung').value = n.untung || 0; $('#nRugi').value = n.rugi || 0;
-  $('#nSBeli').checked = n.sBeli !== false; $('#nSTurun').checked = n.sTurun !== false;
+  $('#nSBeli').checked = n.sBeli !== false; $('#nSTurun').checked = n.sTurun !== false; $('#nLapor').checked = n.lapor !== false;
   $('#nUlang').value = String(n.ulang != null ? n.ulang : 30); $('#nMaks').value = String(n.maks || 6);
   $('#nSimpan').onclick = async () => {
     notifPesan('Menyimpan…');
     try { NOTIF = await api('notifSimpan', {aktif: $('#nAktif').checked, untung: Number($('#nUntung').value || 0), rugi: Number($('#nRugi').value || 0),
-      sBeli: $('#nSBeli').checked, sTurun: $('#nSTurun').checked, ulang: Number($('#nUlang').value), maks: Number($('#nMaks').value)}); renderNotif(); notifPesan('Tersimpan.'); }
+      sBeli: $('#nSBeli').checked, sTurun: $('#nSTurun').checked, lapor: $('#nLapor').checked, ulang: Number($('#nUlang').value), maks: Number($('#nMaks').value)}); renderNotif(); notifPesan('Tersimpan.'); }
     catch (e) { notifPesan(e.message, true); }
   };
   $('#nSekarang').onclick = async () => { notifPesan('Menghitung dan mengirim…'); try { const r = await api('sinyalSekarang'); notifPesan('Terkirim: ' + r.beli + ' potensi beli, ' + r.turun + ' waspada turun. Periksa Telegram Anda.'); } catch (e) { notifPesan(e.message, true); } };
+  $('#nLaporan').onclick = async () => { notifPesan('Menyusun laporan…'); try { const r = await api('laporanSekarang'); notifPesan('Laporan terkirim' + (r.sehat ? ' (sistem sehat)' : ' (ada hal yang perlu dicek, lihat isi pesan)') + '. Periksa Telegram Anda.'); } catch (e) { notifPesan(e.message, true); } };
   $('#nBerhenti').onclick = async () => { try { await api('sinyalLihat'); notifPesan('Pengingat Telegram yang sedang berjalan dihentikan untuk hari ini. Sinyal baru tetap dikirim satu kali.'); } catch (e) { notifPesan(e.message, true); } };
   $('#nTes').onclick = async () => { notifPesan('Mengirim…'); try { await api('notifTes'); notifPesan('Pesan tes terkirim. Periksa Telegram Anda.'); } catch (e) { notifPesan(e.message, true); } };
   $('#nPutus').onclick = async () => { if (!confirm('Putuskan Telegram? Peringatan akan berhenti.')) return; try { NOTIF = await api('notifPutus'); renderNotif(); } catch (e) { notifPesan(e.message, true); } };
