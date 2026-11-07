@@ -253,10 +253,10 @@ tr.sel{background:var(--bg)}
   </div>
 
   <div class="card" id="kbCard" hidden>
-    <h3>Kandidat beli hari ini (dipindai dari saham IDX30)</h3>
+    <h3>Kandidat beli hari ini (dipindai dari saham IDX80)</h3>
     <div id="kbOut"></div>
     <div class="row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap">
-      <label class="chk"><input type="checkbox" id="kbTerj" checked> Hanya yang terjangkau modal saya (1 lot ≤ modal)</label>
+      <label class="chk"><input type="checkbox" id="kbTerj"> Sembunyikan saham yang 1 lot-nya melebihi modal saya</label>
       <label class="chk"><input type="checkbox" id="kbPasar" checked> Perketat syarat saat pasar lemah (skor minimal +15)</label>
       <button id="kbMuat">Pindai ulang</button>
       <button id="kbSegar">Perbarui data pasar</button>
@@ -1613,11 +1613,14 @@ function renderLiveInfo(){
 }
 
 /* ===================== kondisi pasar & ringkasan sederhana ===================== */
+// Inti pasar untuk menilai kondisi pasar: IDX30 (periode 2 Nov 2026 - 29 Jan 2027). Bila kurang dari 10 yang tersedia, dipakai semua saham yang dipindai.
+const INTI30 = new Set('AADI,ADMR,ADRO,AMRT,ANTM,ASII,BBCA,BBNI,BBRI,BMRI,BRPT,BUMI,CPIN,DEWA,EMTK,GOTO,ICBP,INCO,INDF,INKP,ISAT,JPFA,KLBF,MBMA,MDKA,MEDC,PGAS,PTBA,TLKM,UNTR'.split(','));
 function kondisiPasar(){
   if (!PASAR.loaded || PASAR.st.length < 10) return null;
   const th = isFinite(S.cfg.entryTh) ? S.cfg.entryTh : 25;
   let n = 0, a20 = 0, a50 = 0, a200 = 0, n200 = 0, sum = 0, beli = 0, buruk = 0;
-  PASAR.st.forEach(st => {
+  const inti = PASAR.st.filter(st => INTI30.has(st.name)), dasar = inti.length >= 10 ? inti : PASAR.st;
+  dasar.forEach(st => {
     const i = st.d.c.length - 1, c = st.d.c[i], sc = lastScore(st); if (!sc) return;
     n++; sum += sc.total;
     if (st.I.sma20[i] != null && c > st.I.sma20[i]) a20++;
@@ -1632,15 +1635,15 @@ function kondisiPasar(){
   if (p50 >= 0.6 && avg >= 15) { level = 'sehat'; t = 'PASAR SEHAT'; adv = 'Sebagian besar saham besar sedang naik. Sinyal beli lebih bisa dipercaya, tetapi tetap pasang stop.'; }
   else if (p50 < 0.4 || avg < -15) { level = 'lemah'; t = 'PASAR LEMAH'; adv = 'Kebanyakan saham besar masih turun. Membeli melawan arah pasar umumnya lebih berisiko. Menunggu, atau memakai ukuran posisi kecil, adalah pilihan yang wajar.'; }
   else { level = 'netral'; t = 'PASAR CAMPURAN'; adv = 'Sebagian saham naik, sebagian turun. Pilih hanya saham yang kuat dan pakai ukuran posisi lebih kecil.'; }
-  return {level, t, adv, n, p20, p50, p200, avg, beli, buruk, cls: level === 'sehat' ? 'good' : level === 'lemah' ? 'bad' : 'warn', ic: level === 'sehat' ? '▲' : level === 'lemah' ? '▼' : '●'};
+  return {level, t, adv, n, inti: dasar === inti, p20, p50, p200, avg, beli, buruk, cls: level === 'sehat' ? 'good' : level === 'lemah' ? 'bad' : 'warn', ic: level === 'sehat' ? '▲' : level === 'lemah' ? '▼' : '●'};
 }
 function renderPasar(){
   const card = $('#pasarCard'); if (!card) return;
   card.hidden = !SES.token; if (!SES.token) return;
   const K = kondisiPasar(), out = $('#pasarOut');
-  if (!K) { out.innerHTML = `<p class="note" style="margin:0">${PASAR.busy ? 'Memuat data pasar…' : 'Belum cukup data pasar (perlu minimal 10 saham IDX30). Tekan "Perbarui data pasar" di kartu ini (semua pengguna boleh).'}</p>`; return; }
+  if (!K) { out.innerHTML = `<p class="note" style="margin:0">${PASAR.busy ? 'Memuat data pasar…' : 'Belum cukup data pasar (perlu minimal 10 saham). Tekan "Perbarui data pasar" di kartu ini (semua pengguna boleh).'}</p>`; return; }
   const pc = x => x == null ? '–' : (x * 100).toFixed(0) + '%';
-  out.innerHTML = `<div class="head"><span class="badge ${K.cls}"><i>${K.ic}</i>${K.t}</span><span class="note" style="margin:0">dihitung dari ${K.n} saham IDX30</span></div>
+  out.innerHTML = `<div class="head"><span class="badge ${K.cls}"><i>${K.ic}</i>${K.t}</span><span class="note" style="margin:0">dihitung dari ${K.n} saham ${K.inti ? 'IDX30' : 'yang dipindai'}</span></div>
     <p style="margin:8px 0">${esc(K.adv)}</p>
     <div class="tiles">
       <div class="tile"><span>Di atas rata-rata 20 hari</span><b>${pc(K.p20)}</b></div>
@@ -1684,7 +1687,7 @@ function ringkasan(st, pos, price){
 
 /* ===================== kandidat beli (pindai pasar) ===================== */
 const PASAR = {st: [], menunggu: [], total: 0, updated: '', busy: false, loaded: false, err: ''};
-const KB = {terjangkau: true, pasar: true, thPakai: 25, thDasar: 25};
+const KB = {terjangkau: false, pasar: true, thPakai: 25, thDasar: 25};
 function analisaPasar(x){
   const d = {date: x.d.map(t => new Date(t + 'T00:00:00Z')), o: x.o, h: x.h, l: x.l, c: x.c, v: x.v};
   return {name: x.kode, d, I: analyze(d)};
@@ -1707,22 +1710,74 @@ function hitungKB(){
   PASAR.st.forEach(st => {
     const sc = lastScore(st), pe = peluang(st), pl = plan(st.d, st.I, S.cfg);
     if (!sc || !pe || !pl) return;
-    const likuid = pe.avgVal >= 1e9;
-    out.push({st, sc, pe, pl, likuid, terjangkau: pl.byCash >= 1, v: verdict(sc.total),
+    const likuid = pe.avgVal >= 1e9, nn = st.d.c.length - 1, cc = st.d.c;
+    const rugi1 = 100 * pl.risk + 100 * pl.e * S.cfg.feeB + 100 * pl.stop * S.cfg.feeS;
+    const rp = S.cfg.riskPct > 0 ? S.cfg.riskPct / 100 : 0.02;
+    out.push({st, sc, pe, pl, likuid, terjangkau: pl.byCash >= 1, bisa: pl.lots >= 1, rugi1,
+      modalButuh: Math.max(pl.e * 100, rugi1 / rp), v: verdict(sc.total),
+      ret20: nn >= 20 ? cc[nn] / cc[nn - 20] - 1 : null, ret60: nn >= 60 ? cc[nn] / cc[nn - 60] - 1 : null,
       gab: 0.6 * (sc.total + 100) / 2 + 0.4 * pe.pt, lolos: sc.total >= th && likuid && pe.rs <= 75});
   });
+  rankPotensi(out);
   return out;
+}
+/* peringkat potensi naik: gabungan momentum awal, skor robot, kekuatan relatif, pola harga, dikurangi penalti bila sudah terlalu tinggi */
+function polaPotensi(st){
+  const d = st.d, I = st.I, n = d.c.length - 1, c = d.c[n], why = [], warn = [];
+  const s20 = I.sma20[n], s50 = I.sma50[n], rs = I.rsi[n];
+  let bonus = 0, pen = 0;
+  if (n >= 22) {
+    let hi = -Infinity, lo = Infinity, sm = 0, sv = 0;
+    for (let i = n - 15; i < n; i++) { hi = Math.max(hi, d.h[i]); lo = Math.min(lo, d.l[i]); sm += d.c[i]; }
+    for (let i = n - 20; i < n; i++) sv += d.v[i];
+    const lebar = (hi - lo) / (sm / 15), volX = sv > 0 ? d.v[n] / (sv / 20) : 0;
+    if (lebar <= 0.10 && c > hi && volX >= 1.3) { bonus += 10; why.push('breakout dari konsolidasi sempit (' + (lebar * 100).toFixed(0) + '% rentang 15 hari) dengan volume ' + volX.toFixed(1).replace('.', ',') + '×'); }
+  }
+  if (s20 != null && s50 != null && c > s50 && s20 > s50 && Math.abs(c / s20 - 1) <= 0.03 && rs != null && rs >= 40 && rs <= 58 && c > d.c[n - 1]) {
+    bonus += 7; why.push('koreksi sehat ke SMA20 di tren naik, mulai memantul');
+  }
+  if (n >= 20) { const r = c / d.c[n - 20] - 1; if (r > 0.25) { pen += 15; warn.push('sudah naik ' + (r * 100).toFixed(0) + '% dalam 20 hari, rawan koreksi / terlambat masuk'); } }
+  if (s20 != null && c / s20 - 1 > 0.12) { pen += 10; warn.push('harga ' + ((c / s20 - 1) * 100).toFixed(0) + '% di atas SMA20, rawan turun ke rata-rata'); }
+  return {bonus: Math.min(bonus, 10), pen, why, warn};
+}
+function rankPotensi(arr){
+  const pr = (v, all) => {
+    if (v == null) return 50;
+    const a = all.filter(x => x != null); if (a.length < 2) return 50;
+    let b = 0; a.forEach(x => { if (x < v) b++; else if (x === v) b += 0.5; });
+    return Math.max(0, Math.min(100, 100 * (b - 0.5) / (a.length - 1)));
+  };
+  const a20 = arr.map(r => r.ret20), a60 = arr.map(r => r.ret60);
+  arr.forEach(r => {
+    const po = polaPotensi(r.st), rs = 0.4 * pr(r.ret20, a20) + 0.6 * pr(r.ret60, a60);
+    r.rsRank = rs; r.pola = po;
+    r.pot = Math.round(Math.max(0, Math.min(100, 0.35 * r.pe.pt + 0.25 * (r.sc.total + 100) / 2 + 0.30 * rs + po.bonus - po.pen)));
+  });
 }
 function barisKB(r){
   const {st, sc, pe, pl} = r, k = st.name, ada = !!S.stocks[k];
-  const rugi1 = 100 * pl.risk + 100 * pl.e * S.cfg.feeB + 100 * pl.stop * S.cfg.feeS;
+  const rugi1 = r.rugi1, butuh = fmtP(Math.ceil(r.modalButuh / 1000) * 1000);
   const lot = pl.lots > 0 ? `<b>${pl.lots} lot</b><br><span class="note">Rp ${fmtP(pl.cost)}</span>`
-    : (pl.byCash >= 1 ? `1 lot = Rp ${fmtP(pl.e * 100)}<br><span style="color:var(--warn)">melebihi anggaran risiko; rugi bila kena stop ≈ Rp ${fmtP(rugi1)}</span>` : '<span class="neg">modal kurang</span>');
+    : (pl.byCash >= 1 ? `<b style="color:var(--warn)">Pantau saja</b><br>1 lot = Rp ${fmtP(pl.e * 100)}, tetapi melebihi anggaran risiko (rugi bila kena stop ≈ Rp ${fmtP(rugi1)}).<br><span class="note">Butuh modal ± Rp ${butuh}</span>`
+      : `<b style="color:var(--warn)">Pantau saja</b><br>1 lot = Rp ${fmtP(pl.e * 100)}, melebihi modal.<br><span class="note">Butuh modal ± Rp ${butuh}</span>`);
   const cat = pe.why.slice(0, 3).map(esc).join('; ') + (pe.warn.length ? '<br><span style="color:var(--warn)">⚠ ' + pe.warn.map(esc).join('; ') + '</span>' : '');
   return `<tr><td><b>${esc(k)}</b>${ada ? '<br><span class="note">di watchlist</span>' : ''}</td><td class="num">${fmtP(pe.price)}</td>
     <td><span class="badge ${r.v.cls}"><i>${r.v.ic}</i>${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</span></td><td class="num">${pe.pt}</td><td class="num">${pe.rs.toFixed(0)}</td>
     <td class="num">Masuk ~${fmtP(pl.e)}<br><span class="neg">Stop ${fmtP(pl.stop)} (${fmtPct(pl.stop / pl.e - 1, 1)})</span><br><span class="pos">Target ${fmtP(pl.t1)} (${fmtPct(pl.t1 / pl.e - 1, 1)})</span></td>
     <td>${lot}</td><td class="why">${cat}</td>
+    <td><button type="button" data-kb="${esc(k)}" data-ada="${ada ? 1 : 0}">${ada ? 'Buka' : 'Tambah'}</button></td></tr>`;
+}
+function barisRank(r, i){
+  const {st, sc, pe, pl} = r, k = st.name, ada = !!S.stocks[k], po = r.pola;
+  const [t, c] = r.pot >= 65 ? ['Potensi kuat', 'good'] : r.pot >= 50 ? ['Layak dipantau', 'warn'] : ['Lemah', 'bad'];
+  const stat = pl.lots > 0 ? `<b>Bisa dibeli</b><br><span class="note">${pl.lots} lot, Rp ${fmtP(pl.cost)}</span>`
+    : `<b style="color:var(--warn)">Pantau saja</b><br><span class="note">butuh modal ± Rp ${fmtP(Math.ceil(r.modalButuh / 1000) * 1000)}</span>`;
+  const al = po.why.concat(pe.why).slice(0, 3).map(esc).join('; ') + (po.warn.concat(pe.warn).length ? '<br><span style="color:var(--warn)">⚠ ' + po.warn.concat(pe.warn).map(esc).join('; ') + '</span>' : '');
+  return `<tr><td class="num">${i + 1}</td><td><b>${esc(k)}</b>${ada ? '<br><span class="note">di watchlist</span>' : ''}</td><td class="num">${fmtP(pe.price)}</td>
+    <td class="num ${pe.chg1 >= 0 ? 'pos' : 'neg'}">${fmtPct(pe.chg1, 1)}</td><td class="num ${r.ret20 == null ? '' : r.ret20 >= 0 ? 'pos' : 'neg'}">${r.ret20 == null ? '–' : fmtPct(Math.abs(r.ret20) < 0.005 ? 0 : r.ret20, 0)}</td>
+    <td><span class="badge ${c}">${r.pot} · ${t}</span></td>
+    <td><span class="badge ${r.v.cls}"><i>${r.v.ic}</i>${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</span></td>
+    <td>${stat}</td><td class="why">${al}</td>
     <td><button type="button" data-kb="${esc(k)}" data-ada="${ada ? 1 : 0}">${ada ? 'Buka' : 'Tambah'}</button></td></tr>`;
 }
 function renderKB(){
@@ -1744,11 +1799,23 @@ function renderKB(){
   if (ketat) h += `<div class="alertbox warn" style="margin-top:0">Pasar sedang lemah, jadi syarat skor beli diperketat dari +${KB.thDasar} menjadi <b>+${KB.thPakai}</b>. Matikan centang "Perketat syarat" di bawah bila ingin memakai syarat biasa.</div>`;
   else { const K = kondisiPasar(); if (K && K.level === 'lemah') h += '<div class="alertbox warn" style="margin-top:0">Pasar sedang lemah: kandidat di bawah berisiko lebih tinggi. Pertimbangkan menunggu atau memakai ukuran posisi kecil.</div>'; }
   const kepala = '<div class="tblwrap"><table><thead><tr><th>Saham</th><th class="num">Harga</th><th>Skor robot</th><th class="num">Potensi</th><th class="num">RSI</th><th class="num">Rencana (acuan)</th><th>Lot sesuai modal &amp; risiko</th><th>Alasan &amp; catatan</th><th></th></tr></thead><tbody>';
-  if (lolos.length) h += `<p style="margin:0 0 8px"><b class="pos">${lolos.length} kandidat memenuhi syarat beli</b> (urut gabungan skor robot &amp; potensi):</p>` + kepala + lolos.map(barisKB).join('') + '</tbody></table></div>';
+  const urut = (a, b) => b.gab - a.gab;
+  const lolosBeli = tampil.filter(r => r.lolos && r.bisa).sort(urut).slice(0, 8), lolosPantau = tampil.filter(r => r.lolos && !r.bisa).sort(urut).slice(0, 8);
+  if (lolosBeli.length) h += `<p style="margin:0 0 8px"><b class="pos">${lolosBeli.length} kandidat memenuhi syarat beli dan sesuai modal &amp; risiko Anda</b> (urut gabungan skor robot &amp; potensi):</p>` + kepala + lolosBeli.map(barisKB).join('') + '</tbody></table></div>';
   else {
-    const dekat = tampil.filter(r => r.likuid).sort((a, b) => b.gab - a.gab).slice(0, 5);
-    h += '<div class="alertbox warn" style="margin-top:0"><b>Belum ada saham yang memenuhi syarat beli hari ini.</b> Itu wajar saat pasar lemah; menunggu juga keputusan yang sah. Di bawah ini yang paling mendekati, <b>bukan rekomendasi beli</b>.</div>';
+    const dekat = tampil.filter(r => r.likuid && r.bisa).sort(urut).slice(0, 5);
+    h += '<div class="alertbox warn" style="margin-top:0"><b>' + (lolosPantau.length ? 'Belum ada saham yang memenuhi syarat beli dan bisa dibeli dengan modal &amp; risiko Anda hari ini.' : 'Belum ada saham yang memenuhi syarat beli hari ini.') + '</b> Itu wajar saat pasar lemah; menunggu juga keputusan yang sah.' + (dekat.length ? ' Di bawah ini yang paling mendekati, <b>bukan rekomendasi beli</b>.' : '') + '</div>';
     if (dekat.length) h += kepala + dekat.map(barisKB).join('') + '</tbody></table></div>';
+  }
+  if (lolosPantau.length) h += `<p style="margin:14px 0 8px"><b style="color:var(--warn)">Pantau saja (${lolosPantau.length}):</b> lolos syarat teknikal robot, tetapi belum bisa dibeli dengan modal atau anggaran risiko Anda saat ini. Kolom "Lot" menunjukkan modal yang dibutuhkan.</p>` + kepala + lolosPantau.map(barisKB).join('') + '</tbody></table></div>';
+  const rank = tampil.filter(r => r.likuid).sort((a, b) => b.pot - a.pot).slice(0, 10);
+  if (rank.length) {
+    const Km = kondisiPasar();
+    h += `<h4 style="margin:18px 0 6px">Peringkat potensi naik (10 teratas dari ${tampil.filter(r => r.likuid).length} saham likuid)</h4>`
+      + (Km && Km.level === 'lemah' ? '<p class="note" style="margin:0 0 6px;color:var(--warn)">Pasar sedang lemah: peringkat hanya menunjukkan yang <b>relatif</b> terkuat, risiko gagalnya tetap lebih tinggi dari biasanya.</p>' : '')
+      + '<div class="tblwrap"><table><thead><tr><th class="num">#</th><th>Saham</th><th class="num">Harga</th><th class="num">Hari ini</th><th class="num">20 hari</th><th>Skor potensi</th><th>Skor robot</th><th>Status</th><th>Alasan &amp; catatan</th><th></th></tr></thead><tbody>'
+      + rank.map(barisRank).join('') + '</tbody></table></div>'
+      + '<p class="note">Skor potensi 0–100 = 35% momentum awal (volume, breakout, RSI, MACD) + 25% skor robot + 30% kekuatan relatif dibanding saham lain yang dipindai (kenaikan 20 &amp; 60 hari) + bonus pola harga (maks. 10), dikurangi penalti bila harga sudah naik terlalu tinggi. Ini peringkat berbasis aturan yang <b>belum terbukti</b> memprediksi kenaikan; pakai untuk mempersempit daftar bacaan, bukan sebagai alasan membeli. Saham "Pantau saja" tetap bisa dipelajari sekarang dan dibeli bila modal sudah cukup.</p>';
   }
   out.innerHTML = h;
   out.querySelectorAll('button[data-kb]').forEach(b => {
