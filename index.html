@@ -84,6 +84,8 @@ tr.sel{background:var(--bg)}
 .pill.on{border-color:var(--good);color:var(--ink);background:var(--good-bg)}
 .sinyal{--gl:var(--good);position:sticky;top:0;z-index:40;margin:0 0 10px;padding:8px 12px;border:1px solid var(--good);border-left-width:6px;border-radius:8px;background:var(--good-bg);font-size:14px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
 .sinyal[hidden]{display:none}
+.cekp{margin:6px 0 0;padding:0;list-style:none;font-size:14px}.cekp li{margin:3px 0}.cekp .no{color:var(--bad)}.cekp .ya{color:var(--good)}
+.kep{margin-top:12px;padding-top:10px;border-top:1px solid var(--line,#ccc)}.kep .tile.sorot{outline:2px solid var(--accent,#0a84ff)}
 .siaga{margin:0 0 10px;padding:8px 12px;border:1px solid var(--line,#ccc);border-radius:8px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px}
 .siaga.on{border-color:var(--good);background:var(--good-bg)}
 .siaga select{font:inherit}
@@ -125,16 +127,6 @@ tr.sel{background:var(--bg)}
 .tile{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .tile b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
 .tile span{font-size:12px;color:var(--ink2)}
-.pg{margin-top:10px}
-.pg .tile.pgon{outline:2px solid var(--s1)}
-.pg h4{margin:12px 0 4px;font-size:14px}
-.cl{list-style:none;margin:0;padding:0}
-.cl li{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px}
-.cl .ck{width:18px;flex:none;text-align:center;font-weight:700}
-.cl .tx{flex:1;min-width:0}
-.cl .tx small{display:block;color:var(--muted);font-size:12px}
-.cl .w{flex:none;color:var(--ink2);font-variant-numeric:tabular-nums}
-.cl .na{color:var(--muted)}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink2);margin:8px 0}
 .legend i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
 .chartwrap{position:relative;touch-action:pan-y}
@@ -1532,6 +1524,59 @@ function posLevels(st, pos){
   return {e, stop, tp, autoStop: !(pos.stop > 0), autoTp: !(pos.tp > 0)};
 }
 function posValid(pos){ return pos && pos.e > 0 && pos.lots > 0; }
+// Keputusan posisi: tahan / tambah / jual, lengkap dengan angka. Murni (tidak menyentuh DOM).
+function keputusanPosisi(st, pos, price, cfg){
+  if (!posValid(pos) || !(price > 0)) return null;
+  const d = st.d, I = st.I, n = d.c.length - 1, a = I.atr[n], sc = lastScore(st); if (!sc) return null;
+  const lv = posLevels(st, pos), e = pos.e, lots = pos.lots, sh = lots * 100, cost = e * sh;
+  const fb = cfg.feeB || 0, fs = cfg.feeS || 0, risikoPct = cfg.riskPct || 0, modal = cfg.cap || 0;
+  const R0 = a != null ? cfg.atrMult * a : (lv.stop && lv.stop < e ? e - lv.stop : null);
+  const gR = R0 > 0 ? (price - e) / R0 : null;
+  const bersih = (p, l) => (p - e) * l * 100 - e * l * 100 * fb - p * l * 100 * fs;
+  const s20 = I.sma20[n], exitTh = isFinite(cfg.exitTh) ? cfg.exitTh : 0, entryTh = isFinite(cfg.entryTh) ? cfg.entryTh : 25;
+  const trendOk = s20 != null && price > s20, stopAman = !(lv.stop && price <= lv.stop);
+  const sinyalJual = sc.total <= exitTh, targetCapai = !!(lv.tp && price >= lv.tp), dekatTarget = !!(lv.tp && price >= lv.tp * 0.97);
+  const impas = tUp(e * (1 + fb + fs) + 1e-9), trail = a != null ? tDown(price - cfg.atrMult * a) : null;
+  let stopBaru = lv.stop || 0;
+  if (gR != null && gR >= 1) stopBaru = Math.max(stopBaru, impas);
+  if (gR != null && gR >= 1.5 && trail) stopBaru = Math.max(stopBaru, trail);
+  if (stopBaru >= price) stopBaru = lv.stop || 0;
+  const naikStop = stopBaru > (lv.stop || 0);
+  // aksi utama
+  let aksi, cls, alasan, lotJual = 0;
+  if (!stopAman) { aksi = 'JUAL'; cls = 'bad'; alasan = 'Harga menyentuh atau di bawah stop. Patuhi rencana: keluar untuk membatasi rugi.'; lotJual = lots; }
+  else if (sinyalJual) { aksi = 'JUAL'; cls = 'bad'; alasan = 'Skor robot (' + Math.round(sc.total) + ') sudah di bawah batas keluar (' + exitTh + ').'; lotJual = lots; }
+  else if (targetCapai && lots >= 2) { aksi = 'JUAL SEBAGIAN'; cls = 'good'; alasan = 'Target tercapai: amankan untung dengan menjual separuh, sisanya ditahan dengan stop dinaikkan.'; lotJual = Math.floor(lots / 2); }
+  else if (targetCapai) { aksi = 'AMANKAN UNTUNG'; cls = 'good'; alasan = 'Target tercapai dan Anda hanya punya 1 lot (tidak bisa dibagi): jual semua, atau tahan dengan stop yang dinaikkan bila tren masih kuat.'; lotJual = lots; }
+  else if (naikStop) { aksi = 'TAHAN, NAIKKAN STOP'; cls = 'good'; alasan = 'Untung sudah ' + (gR != null ? gR.toFixed(1) + '× risiko awal' : 'cukup') + '. Naikkan stop agar untung terkunci.'; }
+  else { aksi = 'TAHAN'; cls = 'good'; alasan = 'Masih di antara stop dan target, tidak ada sinyal jual.'; }
+  // tambah posisi
+  const sisaModal = modal > 0 ? modal - cost : 0, byCash = sisaModal > 0 ? Math.floor(sisaModal / (price * 100 * (1 + fb))) : 0;
+  const stopTambah = naikStop ? stopBaru : (lv.stop || 0), batasRugi = modal * risikoPct / 100;
+  const rugiLama = stopTambah > 0 && stopTambah < e ? (e - stopTambah) * sh : 0;
+  const perLot = stopTambah > 0 && stopTambah < price ? (price - stopTambah) * 100 + price * 100 * fb + stopTambah * 100 * fs : 0;
+  const byRisk = perLot > 0 && batasRugi > rugiLama ? Math.floor((batasRugi - rugiLama) / perLot) : 0;
+  const syarat = {
+    untung: gR != null && gR >= 1, tren: trendOk && sc.total >= entryTh, target: !dekatTarget, aman: stopAman && !sinyalJual,
+    dana: byCash >= 1, risiko: byRisk >= 1};
+  const bolehTambah = syarat.untung && syarat.tren && syarat.target && syarat.aman && syarat.dana && syarat.risiko;
+  const tambahLot = bolehTambah ? Math.max(0, Math.min(byRisk, byCash, lots)) : 0;
+  const f = x => fmtP(Math.abs(Math.round(x)));
+  const tulis = x => (x >= 0 ? '+' : '−') + 'Rp ' + f(x);
+  const cek = [
+    {g: 'jual', ok: stopAman, t: 'Harga masih di atas stop', d: lv.stop ? 'stop ' + fmtP(lv.stop) + ', harga ' + fmtP(price) + ' (' + fmtPct(lv.stop / price - 1, 1) + ')' : 'stop belum ada'},
+    {g: 'jual', ok: !sinyalJual, t: 'Tidak ada sinyal jual robot', d: 'skor ' + Math.round(sc.total) + ', batas keluar ' + exitTh},
+    {g: 'jual', ok: trendOk, t: 'Tren terjaga (harga di atas rata-rata 20 hari)', d: s20 != null ? 'rata-rata 20 hari ' + fmtP(s20) : 'belum ada data'},
+    {g: 'jual', ok: !targetCapai, t: 'Target belum tercapai (belum waktunya ambil untung)', d: lv.tp ? 'target ' + fmtP(lv.tp) + ' (' + fmtPct(lv.tp / price - 1, 1) + ' lagi)' : 'target belum ada'},
+    {g: 'tambah', ok: syarat.untung, t: 'Untung sudah ≥ 1× risiko awal', d: gR != null ? gR.toFixed(1) + '× (risiko awal ±Rp ' + fmtP(Math.round(R0)) + ' per lembar)' : 'tidak bisa dihitung'},
+    {g: 'tambah', ok: syarat.tren, t: 'Tren naik: harga di atas rata-rata 20 hari dan skor ≥ ' + entryTh, d: 'skor ' + Math.round(sc.total)},
+    {g: 'tambah', ok: syarat.target, t: 'Harga belum dekat target', d: lv.tp ? 'target ' + fmtP(lv.tp) : ''},
+    {g: 'tambah', ok: syarat.dana, t: 'Masih ada dana untuk menambah', d: 'sisa modal Rp ' + fmtP(Math.max(0, Math.round(sisaModal))) + ' (cukup ' + byCash + ' lot)'},
+    {g: 'tambah', ok: syarat.risiko, t: 'Total risiko tetap di batas ' + risikoPct + '% modal', d: 'boleh maksimal ' + byRisk + ' lot menurut risiko'}];
+  return {aksi, cls, alasan, gR, R0, lots, price, e, net: bersih(price, lots), pctNet: cost > 0 ? bersih(price, lots) / cost : 0,
+    stop: lv.stop, stopBaru, naikStop, impas, lotJual, sisaLot: lots - lotJual, nettoJual: lotJual ? bersih(price, lotJual) : 0, hasilJual: lotJual ? price * lotJual * 100 * (1 - fs) : 0,
+    tambahLot, bolehTambah, byCash, byRisk, biayaTambah: tambahLot * 100 * price * (1 + fb), tulis, cek};
+}
 function levelsFor(st){
   const k = st.name, L = LIVE.data[k], o = S.stocks[k];
   const list = [];
@@ -1620,6 +1665,7 @@ function bangunLive(st){
   box.innerHTML = `
     <h3>Harga terkini &amp; posisi saya: <span class="kodebadge">${esc(st.name)}</span></h3>
     <div id="liveinfo"></div>
+    <div id="keputusan"></div>
     <div class="row" style="margin-top:10px">
       <label>Harga beli rata-rata ${esc(st.name)} <input type="number" id="pE" min="0" step="1" value="${v(pos.e)}" placeholder="mis. 4990"></label>
       <label>Jumlah lot <input type="number" id="pL" min="0" step="1" value="${v(pos.lots)}" placeholder="mis. 1"></label>
@@ -1654,6 +1700,29 @@ function bangunLive(st){
   renderLiveInfo();
 }
 
+function renderKeputusan(st, L){
+  const box = $('#keputusan'); if (!box) return;
+  const pos = posGet(st.name);
+  if (!posValid(pos)) { box.innerHTML = ''; return; }
+  const dariLive = !!(L && L.price > 0), price = dariLive ? L.price : st.d.c[st.d.c.length - 1];
+  const k = keputusanPosisi(st, pos, price, S.cfg); if (!k) { box.innerHTML = ''; return; }
+  const sorot = x => (x === 'tahan' ? /^TAHAN/.test(k.aksi) : x === 'jual' ? /JUAL|AMANKAN/.test(k.aksi) : false) ? ' sorot' : '';
+  const li = g => k.cek.filter(c => c.g === g).map(c => `<li><span class="${c.ok ? 'ya' : 'no'}">${c.ok ? '✔' : '✖'}</span> ${esc(c.t)} <span class="note">(${esc(c.d)})</span></li>`).join('');
+  const tahanTxt = k.naikStop ? `Stop ${fmtP(k.stop)} → <b>${fmtP(k.stopBaru)}</b> (naik, untung terkunci; impas setelah fee ≈ ${fmtP(k.impas)})` : `Stop tetap <b>${k.stop ? fmtP(k.stop) : '–'}</b>`;
+  const tambahTxt = k.bolehTambah ? `Boleh maksimal <b>${k.tambahLot} lot</b> (±Rp ${fmtP(Math.round(k.biayaTambah))}), dengan stop bersama ${fmtP(k.naikStop ? k.stopBaru : k.stop)}` : `<b>Jangan menambah</b> sekarang (ada syarat yang belum terpenuhi)`;
+  const jualTxt = k.lotJual ? `Jual <b>${k.lotJual} lot</b> → hasil bersih ≈ <b class="${k.nettoJual >= 0 ? 'pos' : 'neg'}">${k.tulis(k.nettoJual)}</b>` + (k.sisaLot > 0 ? `, sisa ${k.sisaLot} lot` : '')
+    : `Bila jual semua ${k.lots} lot sekarang: <b class="${k.net >= 0 ? 'pos' : 'neg'}">${k.tulis(k.net)}</b> (${fmtPct(k.pctNet, 1)}) setelah fee`;
+  box.innerHTML = `<div class="kep"><h3 style="margin:0 0 6px">Keputusan posisi: tahan · tambah · jual</h3>
+    <div class="alertbox ${k.cls}"><b>${k.aksi}.</b> ${esc(k.alasan)}</div>
+    <div class="tiles">
+      <div class="tile${sorot('tahan')}"><span>TAHAN</span><b style="font-weight:600">${tahanTxt}</b></div>
+      <div class="tile${k.bolehTambah ? ' sorot' : ''}"><span>TAMBAH</span><b style="font-weight:600">${tambahTxt}</b></div>
+      <div class="tile${sorot('jual')}"><span>JUAL</span><b style="font-weight:600">${jualTxt}</b></div>
+    </div>
+    <p class="note" style="margin:8px 0 2px"><b>Daftar periksa tahan atau jual</b> (✔ semua = tahan):</p><ul class="cekp">${li('jual')}</ul>
+    <p class="note" style="margin:8px 0 2px"><b>Daftar periksa tambah</b> (semua ✔ baru boleh):</p><ul class="cekp">${li('tambah')}</ul>
+    <p class="note" style="margin:8px 0 0">Dihitung dari ${dariLive ? 'harga terkini' : 'penutupan terakhir'} ${fmtP(price)}; risiko awal = ${S.cfg.atrMult}× ATR. Angka adalah panduan aturan, bukan saran investasi.</p></div>`;
+}
 function renderLiveInfo(){
   const el = $('#liveinfo'); if (!el) return;
   const st = S.stocks[S.sel]; if (!st) return;
@@ -1661,7 +1730,7 @@ function renderLiveInfo(){
   let h = '';
   if (!L) {
     h = LIVE.err ? `<div class="alertbox bad">${esc(LIVE.err)}</div>` : '<p class="note" style="margin:0">Mengambil harga terkini…</p>';
-    el.innerHTML = h; return;
+    el.innerHTML = h; renderKeputusan(st, null); return;
   }
   const chg = L.prev ? L.price / L.prev - 1 : null;
   const lag = L.time ? Math.round((Date.now() - Date.parse(L.time + '+07:00')) / 60000) : null;
@@ -1683,7 +1752,7 @@ function renderLiveInfo(){
         <div class="tile"><span>Untung / rugi bersih (setelah fee)</span><b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}Rp ${fmtP(Math.abs(net))} (${fmtPct(net / cost, 2)})</b></div>
         <div class="tile"><span>Stop ${lv.autoStop ? '(otomatis)' : ''}</span><b class="neg">${lv.stop ? fmtP(lv.stop) + ' (' + fmtPct(lv.stop / L.price - 1) + ' dari sekarang)' : '–'}</b></div>
         <div class="tile"><span>Target ${lv.autoTp ? '(otomatis 1:2)' : ''}</span><b class="pos">${lv.tp ? fmtP(lv.tp) + ' (' + fmtPct(lv.tp / L.price - 1) + ' dari sekarang)' : '–'}</b></div>
-      </div>` + panduanHTML(panduanPosisi(view || st, pos, L.price));
+      </div>`;
   }
   if (view) {
     const n = view.d.c.length - 1, sc = view.I.sc[n];
@@ -1693,116 +1762,10 @@ function renderLiveInfo(){
       if (!posValid(pos) && pl) h += `<p class="note" style="margin:0">Bila beli di sekitar ${fmtP(pl.e)}: stop ${fmtP(pl.stop)}, target 1 ${fmtP(pl.t1)}, ${pl.lots} lot sesuai modal &amp; risiko Anda.${sc.total < S.cfg.entryTh ? ' Sinyal belum memenuhi syarat beli.' : ''}</p>`;
     }
   }
-  el.innerHTML = h;
+  el.innerHTML = h; renderKeputusan(st, L);
   const nt = $('#lvNote');
   if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto ? (buka ? `Otomatis diperbarui tiap ${LIVE.sec / 60} menit selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui sekarang" bila perlu.') : 'Pembaruan otomatis mati.';
   const lg = $('#lglive'); if (lg) lg.innerHTML = '<span><i style="background:var(--s1)"></i>garis harga terkini</span>';
-}
-
-/* ===================== daftar periksa posisi: skor Tahan / Tambah / Jual ===================== */
-// Tiap daftar berisi butir berbobot (total 100). Skor = bobot butir yang terpenuhi ÷ bobot butir yang bisa dinilai.
-// Tahan & Tambah: butir terpenuhi (✔) menambah skor. Jual: butir "alarm menyala" (⚠) menambah skor.
-function panduanPosisi(view, pos, price){
-  if (!view || !posValid(pos) || !(price > 0)) return null;
-  const d = view.d, I = view.I, n = d.c.length - 1, sc = I.sc[n];
-  if (!sc) return null;
-  const cfg = S.cfg, lv = posLevels(view, pos), sh = pos.lots * 100, cost = pos.e * sh;
-  const fB = cfg.feeB || 0, fS = cfg.feeS || 0;
-  const net = (price - pos.e) * sh - cost * fB - price * sh * fS;
-  const untung = net > 0, g = price / pos.e - 1;
-  const exitTh = isFinite(cfg.exitTh) ? cfg.exitTh : 0, entryTh = isFinite(cfg.entryTh) ? cfg.entryTh : 25;
-  const cp = k => { const c = sc.comps.find(x => x.k === k); return c ? c.v : null; };
-  const s20 = I.sma20[n], s50 = I.sma50[n], r = I.rsi[n], h = I.hist[n], hp = n > 0 ? I.hist[n - 1] : null, a = I.atr[n];
-  const K = kondisiPasar();
-  const stopKena = !!(lv.stop && price <= lv.stop), tpKena = !!(lv.tp && price >= lv.tp);
-  const prog = lv.tp && lv.tp > pos.e ? (price - pos.e) / (lv.tp - pos.e) : null;
-  const rugiStop = lv.stop && lv.stop < pos.e ? (pos.e - lv.stop) * sh + cost * fB + lv.stop * sh * fS : 0;
-  const riskAmt = (cfg.cap || 0) * (cfg.riskPct || 0) / 100;
-  const rr = lv.tp && lv.stop && price > lv.stop ? (lv.tp - price) / (price - lv.stop) : null;
-  const macdBurukX = h != null && hp != null ? (h < 0 && h < hp) : null;
-  const rp = x => 'Rp ' + fmtP(Math.abs(x));
-  const B = (t, ok, w, dtl) => ({t, ok, w, d: dtl || ''});
-
-  const tahan = [
-    B('Harga masih di atas stop', lv.stop ? price > lv.stop : null, 20, lv.stop ? 'Stop ' + fmtP(lv.stop) + ' (' + fmtPct(price / lv.stop - 1, 1) + ' dari harga)' : 'Stop belum ada'),
-    B('Belum ada sinyal keluar (skor di atas batas keluar)', sc.total > exitTh, 20, 'Skor ' + fmtS(sc.total) + ', batas keluar ' + fmtS(exitTh)),
-    B('Tren menengah naik (harga di atas SMA50)', s50 != null ? price > s50 : null, 20, s50 != null ? 'SMA50 ' + fmtP(s50) : ''),
-    B('Tren pendek bertahan (harga di atas SMA20)', s20 != null ? price > s20 : null, 10, s20 != null ? 'SMA20 ' + fmtP(s20) : ''),
-    B('Momentum belum rusak (MACD tidak negatif dan memburuk)', macdBurukX == null ? null : !macdBurukX, 15, ''),
-    B('Target belum tercapai', lv.tp ? price < lv.tp : null, 15, lv.tp ? 'Target ' + fmtP(lv.tp) : 'Target belum ada')
-  ];
-  const tambah = [
-    B('Posisi sedang untung bersih (tidak menambah saat rugi)', untung, 15, 'Untung/rugi bersih ' + (net >= 0 ? '+' : '−') + rp(net)),
-    B('Skor robot memenuhi syarat beli', sc.total >= entryTh, 15, 'Skor ' + fmtS(sc.total) + ', syarat ≥ ' + fmtS(entryTh)),
-    B('Harga dekat / menembus high 20 hari (breakout)', cp('brk') != null ? cp('brk') >= 0.5 : null, 15, ''),
-    B('Volume ramai mendukung kenaikan', cp('vol') != null ? cp('vol') > 0.3 : null, 10, ''),
-    B('RSI belum jenuh beli (di bawah 70)', r != null ? r < 70 : null, 10, r != null ? 'RSI ' + r.toFixed(0) : ''),
-    B('Pasar tidak sedang lemah', K ? K.level !== 'lemah' : null, 10, K ? K.t : 'Data pasar belum dimuat'),
-    B('Risiko terkendali (stop di atas harga beli, atau rugi bila stop kena ≤ anggaran risiko)', lv.stop ? (rugiStop === 0 || (riskAmt > 0 && rugiStop <= riskAmt)) : null, 10,
-      lv.stop ? (rugiStop === 0 ? 'Stop sudah di atas harga beli: modal aman' : 'Rugi bila stop kena ' + rp(rugiStop) + (riskAmt > 0 ? ' (batas ' + rp(riskAmt) + ')' : '')) : ''),
-    B('Ruang ke target masih lega (sisa untung ≥ 1,5× risiko)', rr != null ? rr >= 1.5 : null, 15, rr != null ? 'Rasio sisa untung : risiko = ' + rr.toFixed(1).replace('.', ',') + ' : 1' : '')
-  ];
-  const jual = [
-    B('Harga menyentuh / di bawah stop', lv.stop ? stopKena : null, 25, lv.stop ? 'Stop ' + fmtP(lv.stop) : ''),
-    B('Target tercapai', lv.tp ? tpKena : null, 15, lv.tp ? 'Target ' + fmtP(lv.tp) : ''),
-    B('Skor robot di bawah batas keluar (sinyal keluar)', sc.total <= exitTh, 25, 'Skor ' + fmtS(sc.total) + ', batas keluar ' + fmtS(exitTh)),
-    B('Harga turun di bawah SMA50', s50 != null ? price < s50 : null, 10, s50 != null ? 'SMA50 ' + fmtP(s50) : ''),
-    B('MACD negatif dan memburuk', macdBurukX, 5, ''),
-    B('Breakdown: harga menembus low 20 hari', cp('brk') != null ? cp('brk') <= -0.99 : null, 5, ''),
-    B('Volume ramai saat harga turun', cp('vol') != null ? cp('vol') <= -0.5 : null, 5, ''),
-    B('RSI jenuh beli (70 atau lebih)', r != null ? r >= 70 : null, 5, r != null ? 'RSI ' + r.toFixed(0) : ''),
-    B('Sudah menempuh ≥ 90% jalan ke target', prog != null ? prog >= 0.9 : null, 5, prog != null ? 'Baru ' + Math.round(prog * 100) + '% dari jarak beli ke target' : '')
-  ];
-  const skor = L => { let tw = 0, ok = 0; L.forEach(x => { if (x.ok == null) return; tw += x.w; if (x.ok) ok += x.w; }); return tw ? Math.round(ok / tw * 100) : 0; };
-  const sT = skor(tahan), sJ = stopKena ? 100 : skor(jual), sA = (untung && !stopKena) ? skor(tambah) : 0;
-
-  const hotRsi = r != null && r >= 70;
-  const sebagian = untung && !stopKena && (tpKena || (prog != null && prog >= 0.9) || (hotRsi && g >= 0.05) || sJ >= 35);
-  let aksi, cls, ket, kunci;
-  if (stopKena) { aksi = 'JUAL SEMUA'; cls = 'bad'; kunci = 'jual'; ket = 'Stop tersentuh. Sesuai rencana, keluar untuk membatasi rugi.'; }
-  else if (sJ >= 60) { aksi = 'JUAL SEMUA'; cls = 'bad'; kunci = 'jual'; ket = 'Banyak tanda bahaya menyala; tren dan sinyal sudah melemah.'; }
-  else if (sebagian) { aksi = 'JUAL SEBAGIAN (30–50%)'; cls = 'warn'; kunci = 'jual'; ket = 'Amankan sebagian untung, sisanya tahan dengan stop yang dinaikkan.'; }
-  else if (!untung && sJ >= 35) { aksi = 'KURANGI / SIAP KELUAR'; cls = 'warn'; kunci = 'jual'; ket = 'Sinyal robot sudah melemah dan posisi belum untung. Pertimbangkan mengurangi atau keluar sebelum stop kena.'; }
-  else if (sA >= 70 && sT >= 70) { aksi = 'TAMBAH KECIL'; cls = 'good'; kunci = 'tambah'; ket = 'Tambah paling banyak separuh dari posisi awal, lalu naikkan stop untuk seluruh posisi.'; }
-  else if (sT < 50) { aksi = 'TAHAN, WASPADA'; cls = 'warn'; kunci = 'tahan'; ket = 'Dukungan tren lemah. Jangan menambah; siapkan keputusan bila stop mendekat.'; }
-  else { aksi = 'TAHAN'; cls = 'good'; kunci = 'tahan'; ket = untung ? 'Tren masih sehat dan belum ada alasan keluar. Naikkan stop untuk mengunci untung.' : 'Belum ada alasan menambah maupun keluar. Patuhi stop.'; }
-
-  let saranStop = null, saranTxt = '';
-  if (!stopKena && sJ < 60 && untung && lv.stop) {
-    const be = tUp(pos.e * (1 + fB + fS)), tr = a != null ? tDown(price - cfg.atrMult * a) : 0;
-    const cand = Math.max(be, tr);
-    if (cand > lv.stop && cand < price) {
-      saranStop = cand;
-      saranTxt = cand <= be ? 'impas setelah fee, modal terlindungi' : 'trailing: ' + cfg.atrMult + '× ATR di bawah harga';
-    }
-  }
-  return {aksi, cls, ket, kunci, sT, sA, sJ, tahan, tambah, jual, saranStop, saranTxt, untung, net, stopKena};
-}
-function panduanRingkas(gd){
-  if (!gd) return '';
-  const c = gd.cls === 'good' ? 'pos' : gd.cls === 'bad' ? 'neg' : '';
-  return `<div class="ml"><span>Panduan</span><b class="${c}">${esc(gd.aksi)}</b></div>
-        <div class="ml"><span>Tahan ${gd.sT} · Tambah ${gd.sA} · Jual ${gd.sJ}</span></div>`;
-}
-function panduanHTML(gd){
-  if (!gd) return '';
-  const warna = (v, balik) => (balik ? v >= 60 : v >= 70) ? (balik ? 'neg' : 'pos') : (balik ? (v < 35 ? 'pos' : '') : (v < 40 ? 'neg' : ''));
-  const baris = (L, jenis) => L.map(x => {
-    const jl = jenis === 'jual';
-    const sim = x.ok == null ? '–' : jl ? (x.ok ? '⚠' : '○') : (x.ok ? '✔' : '✘');
-    const kls = x.ok == null ? 'na' : jl ? (x.ok ? 'neg' : 'na') : (x.ok ? 'pos' : 'neg');
-    return `<li><span class="ck ${kls}">${sim}</span><span class="tx">${esc(x.t)}${x.d ? '<small>' + esc(x.d) + '</small>' : ''}</span><span class="w">${x.ok == null ? '–' : x.ok ? '+' + x.w : '0'}</span></li>`;
-  }).join('');
-  const tile = (k, nm, v, balik) => `<div class="tile ${gd.kunci === k ? 'pgon' : ''}"><span>${nm} (0–100)</span><b class="${warna(v, balik)}">${v}</b></div>`;
-  return `<div class="pg">
-    <div class="alertbox ${gd.cls}"><b>Panduan posisi: ${esc(gd.aksi)}.</b> ${esc(gd.ket)}${gd.saranStop ? `<br><b>Saran stop baru:</b> naikkan ke ${fmtP(gd.saranStop)} (${esc(gd.saranTxt)}).` : ''}</div>
-    <div class="tiles">${tile('tahan', 'Skor TAHAN', gd.sT, false)}${tile('tambah', 'Skor TAMBAH', gd.sA, false)}${tile('jual', 'Skor JUAL', gd.sJ, true)}</div>
-    <details open><summary>Daftar periksa Tahan / Tambah / Jual (angka otomatis)</summary>
-      <h4>Tahan: ${gd.sT}/100 <span class="note">(✔ = alasan tetap memegang)</span></h4><ul class="cl">${baris(gd.tahan, 'tahan')}</ul>
-      <h4>Tambah: ${gd.sA}/100 <span class="note">(✔ = syarat menambah posisi)</span></h4>${gd.untung ? '' : '<p class="note" style="margin:0 0 4px">Skor Tambah dipatok 0 karena posisi belum untung bersih atau stop sudah tersentuh. Jangan menambah saat rugi (averaging down).</p>'}<ul class="cl">${baris(gd.tambah, 'tambah')}</ul>
-      <h4>Jual: ${gd.sJ}/100 <span class="note">(⚠ = tanda bahaya menyala)</span></h4><ul class="cl">${baris(gd.jual, 'jual')}</ul>
-      <p class="note">Aturan keputusan: Jual ≥ 60 atau stop kena → jual semua. Untung dan (target tercapai / ≥ 90% menuju target / RSI ≥ 70 dengan untung ≥ 5% / Jual ≥ 35) → jual sebagian. Belum untung dan Jual ≥ 35 → kurangi / siap keluar. Tambah ≥ 70 dan Tahan ≥ 70 → tambah kecil. Selain itu → tahan. Alat bantu edukasi berbasis aturan teknikal, bukan saran investasi; keputusan akhir ada pada Anda.</p>
-    </details></div>`;
 }
 
 /* ===================== kondisi pasar & ringkasan sederhana ===================== */
@@ -2227,8 +2190,7 @@ function renderMon(){
       const lbl = {stop: '⛔ Kena stop', target: '🎯 Target', near: '⚠ Dekat stop', neart: '⚠ Dekat target', ok: '✔ Aman'}[s.code];
       h += `<div class="mon ${s.cls} ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(lbl)}${miniChart(view, lv, price)}
         <div class="ml"><span>Untung/rugi</span><b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}Rp ${fmtP(Math.abs(net))} (${fmtPct(net / cost, 2)})</b></div>
-        <div class="ml"><span>Beli ${fmtP(pos.e)} × ${pos.lots} lot</span><span>Stop ${lv.stop ? fmtP(lv.stop) : '–'}</span></div>
-        ${panduanRingkas(panduanPosisi(view, pos, price))}</div>`;
+        <div class="ml"><span>Beli ${fmtP(pos.e)} × ${pos.lots} lot</span><span>Stop ${lv.stop ? fmtP(lv.stop) : '–'}</span></div></div>`;
     } else {
       const sc = lastScore(st), v = sc ? verdict(sc.total) : null;
       h += `<div class="mon ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(v ? `<i>${v.ic}</i> ${v.t}` : '')}${miniChart(view, null, price)}
