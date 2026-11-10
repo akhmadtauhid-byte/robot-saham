@@ -117,6 +117,16 @@ tr.sel{background:var(--bg)}
 .mon .mh b{font-size:17px}
 .mon .mp{font-variant-numeric:tabular-nums}
 .mon svg{width:100%;height:84px;display:block;margin:6px 0}
+.mon svg.tk,#liveinfo svg.tk{height:58px;margin:2px 0}
+#liveinfo svg.tk{height:120px;width:100%;display:block}
+.tkbox{margin:4px 0 6px}.tkcap{font-size:11px;color:var(--muted);line-height:1.35}
+.tkw{position:relative}.tkl{position:absolute;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--bg);border:1px solid currentColor;border-radius:4px;padding:0 4px;line-height:16px;white-space:nowrap;pointer-events:none}
+.tkbox .tkt{font-size:11px;font-weight:600;color:var(--ink2);margin-top:4px}
+.mp,.price{border-radius:5px;padding:0 3px}
+.flash-up{animation:flU 1.8s ease-out}.flash-dn{animation:flD 1.8s ease-out}
+@keyframes flU{0%{background:var(--good);color:#fff}100%{background:transparent}}
+@keyframes flD{0%{background:var(--bad);color:#fff}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){.flash-up,.flash-dn{animation:none}}
 .mon .mf{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
 .mon .mf input{width:84px;padding:5px 6px;font-size:13px}
 .mon .mf button{padding:5px 10px;font-size:13px}
@@ -881,6 +891,7 @@ function keluarLokal(pesan){
   try { if (typeof siagaMati === 'function' && SIAGA.on) siagaMati(); } catch (e) {}
   SES.token = ''; SES.user = null; simpanSesi('');
   S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = ''; UJI.res = null; UJI.err = '';
+  try { tickReset(); } catch (e) {}
   if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
   try { $('#sinyalBar').hidden = true; sinyalJudul(false); SINYAL.html = ''; SINYAL.uid = null; } catch (e) {}
   $('#adminCard').hidden = true; $('#pwCard').hidden = true; $('#notifCard').hidden = true; notifBerhenti(); S.jurnal = []; JR.sigOpen = ''; JR.tutupId = null; $('#jrCard').hidden = true;
@@ -1765,11 +1776,12 @@ function renderLiveInfo(){
   }
   const chg = L.prev ? L.price / L.prev - 1 : null;
   const lag = L.time ? Math.round((Date.now() - Date.parse(L.time + '+07:00')) / 60000) : null;
-  h += `<div class="head"><b class="kodebadge">${esc(st.name)}</b><span class="price">${fmtP(L.price)}</span>
+  h += `<div class="head"><b class="kodebadge">${esc(st.name)}</b><span class="price ${flashCls(st.name)}">${fmtP(L.price)}${arahHtml(st.name)}</span>
     ${chg != null ? `<span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)} vs kemarin</span>` : ''}
     <span class="pill ${buka ? 'on' : ''}">${buka ? 'Pasar buka' : 'Pasar tutup'}</span>
     <span class="note">Data Google ${L.time ? L.time.slice(0, 10) + ' ' + fmtJam(L.time) : '–'} WIB · dicek ${new Date(L.fetched).toLocaleTimeString('id-ID', {timeZone: 'Asia/Jakarta'})}</span></div>`;
   if (L.open || L.high || L.low) h += `<p class="note" style="margin:0 0 6px">Hari ini: buka ${fmtP(L.open)} · tertinggi ${fmtP(L.high)} · terendah ${fmtP(L.low)} · volume ${fmtP(L.vol)}</p>`;
+  { const p0 = posGet(st.name); h += tickChart(st.name, L.prev, posValid(p0) ? posLevels(st, p0) : null, 120); }
   if (buka && lag != null && lag > 30) h += `<p class="note" style="margin:0 0 6px">Data Google tertinggal sekitar ${lag} menit; pakai aplikasi Ajaib untuk harga eksekusi.</p>`;
   if (LIVE.err) h += `<div class="alertbox warn">Gagal memperbarui: ${esc(LIVE.err)} (menampilkan data terakhir)</div>`;
   const view = liveView(st);
@@ -2322,6 +2334,63 @@ function kodePantau(){
   semua.forEach(k => { if ((semua.length <= 6 || posValid(S.pos && S.pos[k])) && set.indexOf(k) < 0) set.push(k); });
   return set;
 }
+/* pergerakan harga hari ini: titik dari tiap pengambilan harga (bukan tick asli; data Google tertunda) */
+const TICKS = {}, TFLASH = {};
+function tickHari(){ return wibNow().toISOString().slice(0, 10); }
+function tickMuat(){
+  try {
+    const o = JSON.parse(localStorage.getItem('rs_tick') || 'null');
+    if (o && o.tgl === tickHari() && o.d) Object.keys(o.d).forEach(k => { TICKS[k] = o.d[k]; });
+    else localStorage.removeItem('rs_tick');
+  } catch (e) {}
+}
+function tickSimpan(){ try { localStorage.setItem('rs_tick', JSON.stringify({tgl: tickHari(), d: TICKS})); } catch (e) {} }
+function tickReset(){ Object.keys(TICKS).forEach(k => delete TICKS[k]); Object.keys(TFLASH).forEach(k => delete TFLASH[k]); try { localStorage.removeItem('rs_tick'); } catch (e) {} }
+function tickCatat(k, L){
+  if (!L || !(L.price > 0)) return;
+  if ((L.time || '').slice(0, 10) !== tickHari()) return;           // data bukan hari ini (libur / belum buka)
+  const a = TICKS[k] || (TICKS[k] = []), t = Date.now(), p = L.price, last = a[a.length - 1];
+  if (last && p !== last.p) TFLASH[k] = t;
+  if (!last || p !== last.p || t - last.t >= 100e3) { a.push({t, p}); if (a.length > 300) a.shift(); tickSimpan(); }
+}
+function tickArah(k){
+  const a = TICKS[k]; if (!a || a.length < 2) return null;
+  const last = a[a.length - 1];
+  for (let i = a.length - 2; i >= 0; i--) if (a[i].p !== last.p) return {arah: last.p > a[i].p ? 1 : -1, delta: Math.abs(last.p - a[i].p)};
+  return null;
+}
+function flashCls(k){ return TFLASH[k] && Date.now() - TFLASH[k] < 2500 ? ((tickArah(k) || {}).arah > 0 ? 'flash-up' : 'flash-dn') : ''; }
+function arahHtml(k){
+  const r = tickArah(k); if (!r) return '';
+  return ` <small class="${r.arah > 0 ? 'pos' : 'neg'}" title="Perubahan sejak pembaruan sebelumnya">${r.arah > 0 ? '▲' : '▼'}${fmtP(r.delta)}</small>`;
+}
+function tickChart(k, prev, lv, H){
+  const a = TICKS[k] || [], W = 240; H = H || 58;
+  const jam = t => new Date(t).toLocaleTimeString('id-ID', {timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit'});
+  if (a.length < 2) return `<div class="tkbox"><div class="tkt">Pergerakan hari ini</div><div class="tkcap">${a.length ? 'Titik pertama tercatat ' + jam(a[0].t) + ' WIB; grafik muncul setelah pembaruan berikutnya.' : 'Belum ada pergerakan tercatat hari ini. Grafik terisi saat pasar buka dan halaman terbuka.'}</div></div>`;
+  const t0 = Date.parse(tickHari() + 'T09:00:00+07:00'), t1 = Date.parse(tickHari() + 'T16:05:00+07:00');
+  const last = a[a.length - 1], pad = 4;
+  let lo = Infinity, hi = -Infinity;
+  a.forEach(q => { lo = Math.min(lo, q.p); hi = Math.max(hi, q.p); });
+  const dekat = x => x > 0 && Math.abs(x / last.p - 1) <= 0.08;
+  [prev, lv && lv.e, lv && lv.stop, lv && lv.tp].filter(dekat).forEach(y => { lo = Math.min(lo, y); hi = Math.max(hi, y); });
+  const span = (hi - lo) || 1, Y = v => pad + (hi - v) / span * (H - 2 * pad);
+  const X = t => Math.max(0, Math.min(1, (t - t0) / (t1 - t0))) * (W - 8) + 2;
+  const naik = prev > 0 ? last.p >= prev : last.p >= a[0].p, col = naik ? 'var(--good)' : 'var(--bad)';
+  const pts = a.map(q => X(q.t).toFixed(1) + ',' + Y(q.p).toFixed(1)).join(' ');
+  const ln = (v, c, d) => v >= lo && v <= hi ? `<line x1="0" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${c}" stroke-width="1.1" ${d ? 'stroke-dasharray="4 3"' : ''} vector-effect="non-scaling-stroke"/>` : '';
+  let g = `<polygon points="${X(a[0].t).toFixed(1)},${H} ${pts} ${X(last.t).toFixed(1)},${H}" fill="${col}" opacity="0.10"/>`;
+  if (prev > 0) g += ln(prev, 'var(--muted)', true);
+  if (lv) g += ln(lv.e, 'var(--s1)', true) + ln(lv.stop, 'var(--bad)', true) + ln(lv.tp, 'var(--good)', true);
+  g += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  g += `<line x1="${X(last.t).toFixed(1)}" x2="${X(last.t).toFixed(1)}" y1="${Y(last.p).toFixed(1)}" y2="${Y(last.p).toFixed(1)}" stroke="${col}" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  const cap = `${a.length} titik · terakhir ${jam(last.t)} WIB · rentang ${fmtP(Math.round(lo))} sampai ${fmtP(Math.round(hi))}${prev > 0 ? ' · garis putus abu-abu = penutupan kemarin' : ''}`;
+  const px = X(last.t) / W * 100, py = Y(last.p) / H * 100;
+  const pos = (px > 60 ? 'right:' + (100 - px + 2).toFixed(1) + '%;' : 'left:' + (px + 2).toFixed(1) + '%;') + (py < 25 ? 'top:' + (py + 6).toFixed(1) + '%;' : 'top:calc(' + py.toFixed(1) + '% - 20px);');
+  const lbl = `<span class="tkl" style="${pos}color:${naik ? 'var(--good)' : 'var(--bad)'}">${fmtP(last.p)}</span>`;
+  return `<div class="tkbox"><div class="tkt">Pergerakan hari ini (09:00 sampai 16:05)</div><div class="tkw"><svg class="tk" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Pergerakan harga ${esc(k)} hari ini, harga terakhir ${fmtP(last.p)}">${g}</svg>${lbl}</div><div class="tkcap">${cap}. Titik dari pembaruan harga (data Google tertunda 15 sampai 20 menit), bukan tick asli.</div></div>`;
+}
+tickMuat();
 function miniChart(view, lv, price){
   const d = view.d, n = d.c.length, from = Math.max(0, n - 40), W = 240, H = 84, pad = 3;
   let lo = Infinity, hi = -Infinity;
@@ -2354,19 +2423,19 @@ function renderMon(){
     const st = S.stocks[k], L = LIVE.data[k], n = st.d.c.length - 1;
     const price = L ? L.price : st.d.c[n], prev = L ? L.prev : (n > 0 ? st.d.c[n - 1] : null);
     const chg = prev ? price / prev - 1 : null, view = (L && liveView(st)) || st;
-    const head = (lbl, cls) => `<div class="mh"><b>${esc(k)}</b>${k === S.sel ? '<span class="dipilih">▶ dipilih</span>' : ''}<span class="mp">${fmtP(price)}</span>${chg != null ? `<span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)}</span>` : ''}${lbl ? `<span class="pill">${lbl}</span>` : ''}</div>`;
+    const head = (lbl, cls) => `<div class="mh"><b>${esc(k)}</b>${k === S.sel ? '<span class="dipilih">▶ dipilih</span>' : ''}<span class="mp ${flashCls(k)}">${fmtP(price)}${arahHtml(k)}</span>${chg != null ? `<span class="${chg >= 0 ? 'pos' : 'neg'}">${fmtPct(chg, 2)}</span>` : ''}${lbl ? `<span class="pill">${lbl}</span>` : ''}</div>`;
     if (punya(k)) {
       const pos = S.pos[k], lv = posLevels(st, pos), sh = pos.lots * 100, cost = pos.e * sh;
       const net = (price - pos.e) * sh - cost * S.cfg.feeB - price * sh * S.cfg.feeS;
       totCost += cost; totNet += net; nPos++; if (L) nHarga++;
       const s = statusPos(price, lv);
       const lbl = {stop: '⛔ Kena stop', target: '🎯 Target', near: '⚠ Dekat stop', neart: '⚠ Dekat target', ok: '✔ Aman'}[s.code];
-      h += `<div class="mon ${s.cls} ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(lbl)}${miniChart(view, lv, price)}
+      h += `<div class="mon ${s.cls} ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(lbl)}${miniChart(view, lv, price)}${tickChart(k, L ? L.prev : null, lv)}
         <div class="ml"><span>Untung/rugi</span><b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}Rp ${fmtP(Math.abs(net))} (${fmtPct(net / cost, 2)})</b></div>
         <div class="ml"><span>Beli ${fmtP(pos.e)} × ${pos.lots} lot</span><span>Stop ${lv.stop ? fmtP(lv.stop) : '–'}</span></div></div>`;
     } else {
       const sc = lastScore(st), v = sc ? verdict(sc.total) : null;
-      h += `<div class="mon ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(v ? `<i>${v.ic}</i> ${v.t}` : '')}${miniChart(view, null, price)}
+      h += `<div class="mon ${k === S.sel ? 'sel' : ''}" data-k="${esc(k)}" tabindex="0">${head(v ? `<i>${v.ic}</i> ${v.t}` : '')}${miniChart(view, null, price)}${tickChart(k, L ? L.prev : null, null)}
         <div class="ml"><span>Belum ada posisi</span>${sc ? `<span>Skor ${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</span>` : ''}</div>
         <div class="mf" data-f="${esc(k)}"><input type="number" min="0" step="1" placeholder="Harga beli" aria-label="Harga beli ${esc(k)}"><input type="number" min="1" step="1" placeholder="Lot" style="width:56px" aria-label="Lot ${esc(k)}"><button type="button">Simpan posisi</button></div></div>`;
     }
@@ -2408,6 +2477,7 @@ async function ambilLive(manual){
     try {
       const j = await apiGet({action: 'harga', kode: k});
       LIVE.data[k] = Object.assign({fetched: Date.now()}, j.harga);
+      try { tickCatat(k, LIVE.data[k]); } catch (e) {}
       if (k === S.sel) { renderLiveInfo(); redrawLive(); }
       renderMon(); cekAlert(k);
     } catch (e) { if (k === S.sel) LIVE.err = e.message; }
