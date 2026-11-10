@@ -117,10 +117,22 @@ tr.sel{background:var(--bg)}
 .mon .mh b{font-size:17px}
 .mon .mp{font-variant-numeric:tabular-nums}
 .mon svg{width:100%;height:84px;display:block;margin:6px 0}
-.mon svg.tk,#liveinfo svg.tk{height:58px;margin:2px 0}
+.mon svg.tk,#liveinfo svg.tk{height:58px;margin:0}
 #liveinfo svg.tk{height:120px;width:100%;display:block}
 .tkbox{margin:4px 0 6px}.tkcap{font-size:11px;color:var(--muted);line-height:1.35}
-.tkw{position:relative}.tkl{position:absolute;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--bg);border:1px solid currentColor;border-radius:4px;padding:0 4px;line-height:16px;white-space:nowrap;pointer-events:none}
+.tkw{position:relative}
+.tkp{position:absolute;width:9px;height:9px;border-radius:50%;background:currentColor;transform:translate(-50%,-50%);pointer-events:none}
+.tkp.on::after{content:"";position:absolute;inset:0;border-radius:50%;background:currentColor;animation:tkping 1.6s ease-out infinite}
+@keyframes tkping{0%{transform:scale(1);opacity:.6}100%{transform:scale(3.4);opacity:0}}
+.tkp.glide{animation:tkglide 1s cubic-bezier(.2,.7,.2,1) both}
+@keyframes tkglide{from{left:var(--x0);top:var(--y0)}to{left:var(--x1);top:var(--y1)}}
+.tkseg,.tkl.baru{animation:tkfade 1s ease-out both}@keyframes tkfade{from{opacity:0}to{opacity:1}}
+.tkbar{height:2px;background:rgba(128,128,128,.25);border-radius:2px;overflow:hidden;margin-top:2px}
+.tkbar i{display:block;height:100%;background:var(--muted);transform-origin:left;animation:tkbar linear forwards}
+@keyframes tkbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){.tkp.on::after,.tkp.glide,.tkseg,.tkl.baru{animation:none}.tkbar{display:none}}
+.kurangi-gerak .flash-up,.kurangi-gerak .flash-dn,.kurangi-gerak .tkp.on::after,.kurangi-gerak .tkp.glide,.kurangi-gerak .tkseg,.kurangi-gerak .tkl.baru{animation:none!important}
+.kurangi-gerak .tkbar{display:none}.tkl{position:absolute;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--bg);border:1px solid currentColor;border-radius:4px;padding:0 4px;line-height:16px;white-space:nowrap;pointer-events:none}
 .tkbox .tkt{font-size:11px;font-weight:600;color:var(--ink2);margin-top:4px}
 .mp,.price{border-radius:5px;padding:0 3px}
 .flash-up{animation:flU 1.8s ease-out}.flash-dn{animation:flD 1.8s ease-out}
@@ -326,6 +338,7 @@ tr.sel{background:var(--bg)}
     <div id="monGrid" class="mongrid"></div>
     <div class="row" style="margin-top:8px;gap:8px;align-items:center;flex-wrap:wrap">
       <button id="monNow">Perbarui semua harga</button>
+      <button class="gerakBtn" type="button" title="Matikan atau hidupkan animasi grafik dan kedip harga" aria-pressed="false">Gerakan: hidup</button>
       <span class="note" id="monNote" style="margin:0"></span>
     </div>
     <p class="note">Semua saham watchlist tampil di sini (harga ikut diperbarui bila watchlist 6 saham atau kurang; jika lebih, hanya saham berposisi). Isi harga beli &amp; lot di kotak saham untuk memantau untung/rugi. Klik kotak untuk membuka detail &amp; grafik besar.</p>
@@ -1542,7 +1555,18 @@ function renderPeluang(){
 /* ===================== harga live, posisi, notifikasi ===================== */
 const SIAGA = {on: false, vol: 'keras', lock: null, ctx: null, diam: null, tDetak: null, tData: null, tAlarm: null, alarmSampai: 0, mulai: 0};
 const VOLUME = {normal: 0.35, keras: 0.8, maks: 1};
-const LIVE = {auto: true, sec: 120, timer: null, busy: false, data: {}, err: '', lastAlert: {}};
+const PREF = (() => { try { return JSON.parse(localStorage.getItem('rs_pref') || '{}') || {}; } catch (e) { return {}; } })();
+const GERAK = {kurang: PREF.kurang != null ? !!PREF.kurang : !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)};
+function prefSimpan(){ try { localStorage.setItem('rs_pref', JSON.stringify({sec: LIVE.sec, kurang: GERAK.kurang})); } catch (e) {} }
+function fmtSec(n){ return n < 60 ? n + ' detik' : (n / 60) + ' menit'; }
+function ketSiklus(){ return 'tiap ' + fmtSec(LIVE.sec) + ' setelah satu putaran selesai' + (LIVE.siklus ? ' (putaran terakhir ' + Math.round(LIVE.siklus) + ' detik)' : ''); }
+function gerakLabel(){ return GERAK.kurang ? 'Gerakan: dikurangi' : 'Gerakan: hidup'; }
+function gerakTerap(){
+  document.documentElement.classList.toggle('kurangi-gerak', GERAK.kurang);
+  document.querySelectorAll('.gerakBtn').forEach(b => { b.textContent = gerakLabel(); b.setAttribute('aria-pressed', GERAK.kurang ? 'true' : 'false'); });
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('.gerakBtn'); if (!b) return; GERAK.kurang = !GERAK.kurang; gerakTerap(); prefSimpan(); });
+const LIVE = {auto: true, sec: [30, 60, 120, 300].includes(PREF.sec) ? PREF.sec : 30, siklus: 0, timer: null, busy: false, data: {}, err: '', lastAlert: {}};
 let TVOPEN = null;
 function wibNow(){ return new Date(Date.now() + 7 * 3600e3); }
 function pasarBuka(){
@@ -1717,8 +1741,9 @@ function bangunLive(st){
     </div>
     <div class="row" style="margin-top:10px">
       <label class="chk"><input type="checkbox" id="lvAuto" ${LIVE.auto ? 'checked' : ''}> Perbarui otomatis</label>
-      <label>Setiap <select id="lvInt"><option value="60">1 menit</option><option value="120">2 menit</option><option value="300">5 menit</option></select></label>
+      <label>Setiap <select id="lvInt"><option value="30">30 detik</option><option value="60">1 menit</option><option value="120">2 menit</option><option value="300">5 menit</option></select></label>
       <button id="lvNow" class="primary">Perbarui sekarang</button>
+      <button class="gerakBtn" type="button" title="Matikan atau hidupkan animasi grafik dan kedip harga" aria-pressed="${GERAK.kurang}">${gerakLabel()}</button>
       <button id="lvNotif">Aktifkan notifikasi &amp; bunyi</button>
     </div>
     <div class="note" id="lvNote" style="margin-top:6px"></div>`;
@@ -1731,7 +1756,7 @@ function bangunLive(st){
   ['#pE', '#pL', '#pS', '#pT'].forEach(id => $(id).addEventListener('change', simpan));
   $('#pClear').onclick = () => { posSet(st.name, null); ['#pE', '#pL', '#pS', '#pT'].forEach(id => { $(id).value = ''; }); renderLiveInfo(); redrawLive(); };
   $('#lvAuto').onchange = e => { LIVE.auto = e.target.checked; jadwalLive(); renderLiveInfo(); };
-  $('#lvInt').onchange = e => { LIVE.sec = +e.target.value; jadwalLive(); };
+  $('#lvInt').onchange = e => { LIVE.sec = +e.target.value; prefSimpan(); jadwalLive(); renderMon(); };
   $('#lvNow').onclick = () => { ambilLive(true); };
   $('#lvNotif').onclick = async () => {
     beep();
@@ -1807,7 +1832,7 @@ function renderLiveInfo(){
   }
   el.innerHTML = h; renderKeputusan(st, L);
   const nt = $('#lvNote');
-  if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto ? (buka ? `Otomatis diperbarui tiap ${LIVE.sec / 60} menit selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui sekarang" bila perlu.') : 'Pembaruan otomatis mati.';
+  if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto ? (buka ? `Otomatis diperbarui ${ketSiklus()} selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui sekarang" bila perlu.') : 'Pembaruan otomatis mati.';
   const lg = $('#lglive'); if (lg) lg.innerHTML = '<span><i style="background:var(--s1)"></i>garis harga terkini</span>';
 }
 
@@ -2335,7 +2360,7 @@ function kodePantau(){
   return set;
 }
 /* pergerakan harga hari ini: titik dari tiap pengambilan harga (bukan tick asli; data Google tertunda) */
-const TICKS = {}, TFLASH = {};
+const TICKS = {}, TFLASH = {}, TBARU = {};
 function tickHari(){ return wibNow().toISOString().slice(0, 10); }
 function tickMuat(){
   try {
@@ -2345,13 +2370,13 @@ function tickMuat(){
   } catch (e) {}
 }
 function tickSimpan(){ try { localStorage.setItem('rs_tick', JSON.stringify({tgl: tickHari(), d: TICKS})); } catch (e) {} }
-function tickReset(){ Object.keys(TICKS).forEach(k => delete TICKS[k]); Object.keys(TFLASH).forEach(k => delete TFLASH[k]); try { localStorage.removeItem('rs_tick'); } catch (e) {} }
+function tickReset(){ Object.keys(TBARU).forEach(k => delete TBARU[k]); Object.keys(TICKS).forEach(k => delete TICKS[k]); Object.keys(TFLASH).forEach(k => delete TFLASH[k]); try { localStorage.removeItem('rs_tick'); } catch (e) {} }
 function tickCatat(k, L){
   if (!L || !(L.price > 0)) return;
   if ((L.time || '').slice(0, 10) !== tickHari()) return;           // data bukan hari ini (libur / belum buka)
   const a = TICKS[k] || (TICKS[k] = []), t = Date.now(), p = L.price, last = a[a.length - 1];
   if (last && p !== last.p) TFLASH[k] = t;
-  if (!last || p !== last.p || t - last.t >= 100e3) { a.push({t, p}); if (a.length > 300) a.shift(); tickSimpan(); }
+  if (!last || p !== last.p || t - last.t >= 100e3) { a.push({t, p}); TBARU[k] = t; if (a.length > 300) a.shift(); tickSimpan(); }
 }
 function tickArah(k){
   const a = TICKS[k]; if (!a || a.length < 2) return null;
@@ -2383,14 +2408,21 @@ function tickChart(k, prev, lv, H){
   if (prev > 0) g += ln(prev, 'var(--muted)', true);
   if (lv) g += ln(lv.e, 'var(--s1)', true) + ln(lv.stop, 'var(--bad)', true) + ln(lv.tp, 'var(--good)', true);
   g += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-  g += `<line x1="${X(last.t).toFixed(1)}" x2="${X(last.t).toFixed(1)}" y1="${Y(last.p).toFixed(1)}" y2="${Y(last.p).toFixed(1)}" stroke="${col}" stroke-width="7" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  const baru = TBARU[k] && Date.now() - TBARU[k] < 3500 && a.length >= 2, pre = a[a.length - 2];
+  if (baru) g += `<polyline class="tkseg" points="${X(pre.t).toFixed(1)},${Y(pre.p).toFixed(1)} ${X(last.t).toFixed(1)},${Y(last.p).toFixed(1)}" fill="none" stroke="${col}" stroke-width="3.2" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
   const cap = `${a.length} titik · terakhir ${jam(last.t)} WIB · rentang ${fmtP(Math.round(lo))} sampai ${fmtP(Math.round(hi))}${prev > 0 ? ' · garis putus abu-abu = penutupan kemarin' : ''}`;
   const px = X(last.t) / W * 100, py = Y(last.p) / H * 100;
   const pos = (px > 60 ? 'right:' + (100 - px + 2).toFixed(1) + '%;' : 'left:' + (px + 2).toFixed(1) + '%;') + (py < 25 ? 'top:' + (py + 6).toFixed(1) + '%;' : 'top:calc(' + py.toFixed(1) + '% - 20px);');
-  const lbl = `<span class="tkl" style="${pos}color:${naik ? 'var(--good)' : 'var(--bad)'}">${fmtP(last.p)}</span>`;
-  return `<div class="tkbox"><div class="tkt">Pergerakan hari ini (09:00 sampai 16:05)</div><div class="tkw"><svg class="tk" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Pergerakan harga ${esc(k)} hari ini, harga terakhir ${fmtP(last.p)}">${g}</svg>${lbl}</div><div class="tkcap">${cap}. Titik dari pembaruan harga (data Google tertunda 15 sampai 20 menit), bukan tick asli.</div></div>`;
+  const warna = naik ? 'var(--good)' : 'var(--bad)', buka = pasarBuka();
+  const lbl = `<span class="tkl${baru ? ' baru' : ''}" style="${pos}color:${warna}">${fmtP(last.p)}</span>`;
+  const geser = baru ? `--x0:${(X(pre.t) / W * 100).toFixed(1)}%;--y0:${(Y(pre.p) / H * 100).toFixed(1)}%;--x1:${px.toFixed(1)}%;--y1:${py.toFixed(1)}%;` : '';
+  const titik = `<span class="tkp${buka ? ' on' : ''}${baru ? ' glide' : ''}" style="left:${px.toFixed(1)}%;top:${py.toFixed(1)}%;color:${warna};${geser}"></span>`;
+  const Lv = LIVE.data[k], sisa = Lv && Lv.fetched ? Math.max(0, (Date.now() - Lv.fetched) / 1000) : null;
+  const bar = buka && LIVE.auto && sisa != null && sisa < LIVE.sec + (LIVE.siklus || 0) ? `<div class="tkbar" title="Menuju pembaruan harga berikutnya"><i style="animation-duration:${LIVE.sec + (LIVE.siklus || 0)}s;animation-delay:-${sisa.toFixed(1)}s"></i></div>` : '';
+  return `<div class="tkbox"><div class="tkt">Pergerakan hari ini (09:00 sampai 16:05)</div><div class="tkw"><svg class="tk" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Pergerakan harga ${esc(k)} hari ini, harga terakhir ${fmtP(last.p)}">${g}</svg>${titik}${lbl}</div>${bar}<div class="tkcap">${cap}. Titik dari pembaruan harga (data Google tertunda 15 sampai 20 menit), bukan tick asli.${bar ? ' Batang tipis di bawah grafik = menuju pembaruan berikutnya.' : ''}</div></div>`;
 }
 tickMuat();
+gerakTerap();
 function miniChart(view, lv, price){
   const d = view.d, n = d.c.length, from = Math.max(0, n - 40), W = 240, H = 84, pad = 3;
   let lo = Infinity, hi = -Infinity;
@@ -2458,7 +2490,7 @@ function renderMon(){
       LIVE.data[k] && delete LIVE.data[k].fetched; renderMon(); if (S.sel === k) renderAll(); ambilLive(true);
     };
   });
-  const nt = $('#monNote'); if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto && pasarBuka() ? `Otomatis diperbarui tiap ${LIVE.sec / 60} menit selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui semua harga" bila perlu.';
+  const nt = $('#monNote'); if (nt && !nt.dataset.keep) nt.textContent = LIVE.auto && pasarBuka() ? `Otomatis diperbarui ${ketSiklus()} selama halaman terbuka.` : 'Pasar tutup: pembaruan otomatis berhenti, tekan "Perbarui semua harga" bila perlu.';
 }
 function redrawLive(){
   const st = S.stocks[S.sel]; if (!st || !LAST_BT) return;
@@ -2468,7 +2500,7 @@ async function ambilLive(manual){
   const daftar = kodePantau();
   if (!daftar.length || LIVE.busy) return;
   if (!API_URL || API_URL.indexOf('GANTI_DENGAN') === 0 || !tokenAktif()) return;
-  LIVE.busy = true;
+  LIVE.busy = true; const mulai = Date.now();
   const btn = $('#lvNow'), bm = $('#monNow'); if (btn) btn.disabled = true; if (bm) bm.disabled = true;
   const nt = $('#lvNote'); if (nt) { nt.dataset.keep = '1'; nt.textContent = 'Mengambil harga terkini… (5–15 detik per saham)'; }
   const mn = $('#monNote'); if (mn) { mn.dataset.keep = '1'; mn.textContent = 'Mengambil harga ' + daftar.length + ' saham… (5–15 detik per saham)'; }
@@ -2482,7 +2514,7 @@ async function ambilLive(manual){
       renderMon(); cekAlert(k);
     } catch (e) { if (k === S.sel) LIVE.err = e.message; }
   }
-  LIVE.busy = false;
+  LIVE.busy = false; LIVE.siklus = (Date.now() - mulai) / 1000;
   const b2 = $('#lvNow'), b3 = $('#monNow'); if (b2) b2.disabled = false; if (b3) b3.disabled = false;
   const n2 = $('#lvNote'); if (n2) delete n2.dataset.keep;
   const m2 = $('#monNote'); if (m2) delete m2.dataset.keep;
