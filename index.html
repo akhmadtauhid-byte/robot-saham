@@ -300,6 +300,16 @@ tr.sel{background:var(--bg)}
     <p class="note">Alat edukasi, bukan saran investasi. "Kandidat" berarti lolos aturan teknikal robot (skor ≥ batas masuk, likuid, RSI tidak terlalu panas), bukan ramalan harga naik. Cek sendiri berita, kinerja perusahaan, dan hasil backtest sebelum memutuskan, dan tetap pasang stop.</p>
   </div>
 
+  <div class="card" id="ujiCard" hidden>
+    <h3>Uji kepercayaan aturan robot (semua saham pasar)</h3>
+    <p class="note" style="margin-top:0">Menguji aturan skor pada riwayat harga lama dari semua saham yang termuat: apakah skor tinggi benar-benar diikuti kenaikan, dan apakah simulasi trade-nya untung secara gabungan dan stabil. Dihitung di perangkat Anda, tanpa mengubah data.</p>
+    <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+      <button id="ujiJalan">Jalankan uji</button>
+      <span class="note" style="margin:0">Memakai pengaturan di kartu "Pengaturan" (skor beli/keluar, stop, fee).</span>
+    </div>
+    <div id="ujiOut" style="margin-top:10px" role="status" aria-live="polite"></div>
+  </div>
+
   <div class="card" id="monCard" hidden>
     <h3>Pantauan saham &amp; posisi saya</h3>
     <div id="monSum"></div>
@@ -650,6 +660,7 @@ function synth(seed, p0, drift, vol, n = 320){
 /* ===================== state ===================== */
 const S = {stocks: {}, pos: {}, sel: null, range: 120, cfg: {}, ct: 'candle', bb: false, s200: false};
 let LAST_BT = null;
+const UJI = {res: null, err: ''};
 function readCfg(){
   const g = id => parseFloat($(id).value);
   S.cfg = {cap: g('#cCap') || 0, riskPct: g('#cRisk') || 1, atrMult: g('#cAtr') || 2, entryTh: g('#cIn'), exitTh: g('#cOut'),
@@ -851,7 +862,7 @@ function simpanSesi(t){ try { if (t) localStorage.setItem('rsm_tok', t); else lo
 function keluarLokal(pesan){
   try { if (typeof siagaMati === 'function' && SIAGA.on) siagaMati(); } catch (e) {}
   SES.token = ''; SES.user = null; simpanSesi('');
-  S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = '';
+  S.stocks = {}; S.pos = {}; S.sel = null; PASAR.st = []; PASAR.loaded = false; PASAR.busy = false; PASAR.err = ''; UJI.res = null; UJI.err = '';
   if (typeof LIVE !== 'undefined') { LIVE.data = {}; LIVE.lastAlert = {}; clearTimeout(LIVE.timer); }
   try { $('#sinyalBar').hidden = true; sinyalJudul(false); SINYAL.html = ''; SINYAL.uid = null; } catch (e) {}
   $('#adminCard').hidden = true; $('#pwCard').hidden = true; $('#notifCard').hidden = true; notifBerhenti(); S.jurnal = []; JR.sigOpen = ''; JR.tutupId = null; $('#jrCard').hidden = true;
@@ -1990,6 +2001,147 @@ function siagaMati(){
   document.addEventListener('visibilitychange', () => { if (SIAGA.on && !document.hidden) siagaKunci(); });
 })();
 
+/* ===================== uji kepercayaan aturan (lintas saham) ===================== */
+const UJI_H = [5, 10, 20];
+const UJI_B = ['Skor ≥ 50 (beli kuat)', 'Skor 25 s/d 49 (beli)', 'Skor −24 s/d +24 (tunggu)', 'Skor −49 s/d −25 (hindari)', 'Skor ≤ −50 (jual)'];
+const ujiBucket = s => s >= 50 ? 0 : s >= 25 ? 1 : s > -25 ? 2 : s > -50 ? 3 : 4;
+const ujiMed = a => { if (!a.length) return null; const b = a.slice().sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+function ujiData(){
+  const m = new Map();
+  (PASAR.st || []).forEach(st => m.set(st.name, st));
+  Object.values(S.stocks).forEach(st => { if (!m.has(st.name) && !/^DEMO/.test(st.name)) m.set(st.name, st); });
+  return [...m.values()].filter(st => st.d.c.length >= 100);
+}
+/* Hitung dua hal: (1) return ke depan setelah tiap kelompok skor, masuk di harga buka hari berikutnya;
+   (2) simulasi trade aturan robot (fungsi backtest) digabung semua saham, dipisah paruh pertama/kedua periode. */
+function ujiHitung(list, cfg){
+  const acc = UJI_H.map(() => UJI_B.map(() => ({n: 0, s: 0, w: 0})));
+  const all = UJI_H.map(() => ({n: 0, s: 0, w: 0}));
+  const tr = {n: 0, w: 0, sw: 0, sl: 0, s: 0, h1: {n: 0, s: 0}, h2: {n: 0, s: 0}};
+  const per = []; let bars = 0, d0 = null, d1 = null;
+  list.forEach(st => {
+    const {d, I} = st, n = d.c.length; bars += n;
+    if (d.date[0] && (!d0 || d.date[0] < d0)) d0 = d.date[0];
+    if (d.date[n - 1] && (!d1 || d.date[n - 1] > d1)) d1 = d.date[n - 1];
+    UJI_H.forEach((h, hi) => {
+      for (let i = 34; i + h < n; i++) {
+        const s = I.sc[i]; if (!s || !(d.o[i + 1] > 0)) continue;
+        const r = d.c[i + h] / d.o[i + 1] - 1, a = acc[hi][ujiBucket(s.total)], z = all[hi];
+        a.n++; a.s += r; if (r > 0) a.w++;
+        z.n++; z.s += r; if (r > 0) z.w++;
+      }
+    });
+    const bt = backtest(d, I, cfg), mid = bt.start + (n - bt.start) / 2;
+    bt.trades.forEach(t => {
+      tr.n++; tr.s += t.ret;
+      if (t.ret > 0) { tr.w++; tr.sw += t.ret; } else tr.sl -= t.ret;
+      const hh = t.iIn < mid ? tr.h1 : tr.h2; hh.n++; hh.s += t.ret;
+    });
+    per.push({name: st.name, n: bt.n, win: bt.win, total: bt.total, bh: bt.bh, mdd: bt.mdd, expo: bt.expo});
+  });
+  const mk = a => ({n: a.n, mean: a.n ? a.s / a.n : null, hit: a.n ? a.w / a.n : null});
+  const grp = (hi, idx) => mk(idx.reduce((o, bi) => ({n: o.n + acc[hi][bi].n, s: o.s + acc[hi][bi].s, w: o.w + acc[hi][bi].w}), {n: 0, s: 0, w: 0}));
+  const nl = tr.n - tr.w;
+  return {
+    nSaham: list.length, bars: bars / list.length, d0, d1,
+    bucket: UJI_H.map((h, hi) => UJI_B.map((b, bi) => mk(acc[hi][bi]))),
+    semua: UJI_H.map((h, hi) => mk(all[hi])),
+    beli: UJI_H.map((h, hi) => grp(hi, [0, 1])),
+    hindar: UJI_H.map((h, hi) => grp(hi, [3, 4])),
+    trade: {n: tr.n, win: tr.n ? tr.w / tr.n : null, mean: tr.n ? tr.s / tr.n : null,
+      avgW: tr.w ? tr.sw / tr.w : null, avgL: nl ? -tr.sl / nl : null,
+      pf: tr.sl > 0 ? tr.sw / tr.sl : (tr.sw > 0 ? Infinity : null)},
+    h1: {n: tr.h1.n, mean: tr.h1.n ? tr.h1.s / tr.h1.n : null},
+    h2: {n: tr.h2.n, mean: tr.h2.n ? tr.h2.s / tr.h2.n : null},
+    per, lebih: per.filter(p => p.total > p.bh).length,
+    medStrat: ujiMed(per.map(p => p.total)), medBH: ujiMed(per.map(p => p.bh)), medMdd: ujiMed(per.map(p => p.mdd)),
+    cfg: {entryTh: cfg.entryTh, exitTh: cfg.exitTh, atrMult: cfg.atrMult, feeB: cfg.feeB, feeS: cfg.feeS}
+  };
+}
+/* Kesimpulan otomatis: sengaja konservatif. "Baik" hanya bila semua syarat terpenuhi. */
+function ujiKesimpulan(r){
+  const i = UJI_H.length - 1, H = UJI_H[i], g = r.beli[i], z = r.semua[i], j = r.hindar[i], t = r.trade;
+  if (!g.n || !t.n) return {cls: 'warn', judul: 'DATA BELUM CUKUP', alasan: ['Pada data ini tidak ada sinyal atau trade yang bisa dinilai. Muat data pasar yang lebih panjang atau turunkan batas skor beli.']};
+  const edge = g.mean - z.mean, pos1 = edge > 0, pos2 = t.mean > 0;
+  const stab = r.h1.n >= 10 && r.h2.n >= 10, pos3 = stab && r.h1.mean > 0 && r.h2.mean > 0;
+  const urut = j.n ? g.mean > j.mean : null, kecil = g.n / H < 30 || t.n < 30;
+  const alasan = [];
+  if (!pos1) alasan.push('Rata-rata return setelah sinyal beli tidak lebih baik daripada rata-rata semua hari.');
+  if (!pos2) alasan.push('Rata-rata hasil per trade negatif setelah fee.');
+  if (!pos3) alasan.push(stab ? 'Paruh pertama dan paruh kedua periode tidak sama-sama untung, hasilnya tidak stabil.' : 'Trade terlalu sedikit untuk membandingkan dua paruh periode.');
+  if (urut === false) alasan.push('Sinyal beli tidak lebih baik daripada sinyal hindari/jual, artinya urutan skor belum terbukti berarti.');
+  if (kecil) alasan.push('Sampel masih kecil (pengamatan yang saling bebas kurang dari 30), jadi hasilnya bisa kebetulan.');
+  let cls, judul;
+  if (!pos1 && !pos2) { cls = 'bad'; judul = 'BELUM TERBUKTI: aturan tidak mengungguli rata-rata pada data ini'; }
+  else if (!alasan.length) { cls = 'good'; judul = 'ADA TANDA POSITIF YANG KONSISTEN (bukan jaminan)'; }
+  else { cls = 'warn'; judul = 'HASIL CAMPURAN: belum bisa diandalkan'; }
+  return {cls, judul, alasan};
+}
+function ujiHTML(r){
+  const P = (x, d = 2) => fmtPct(x, d), C = x => x == null ? '' : x >= 0 ? 'pos' : 'neg';
+  const k = ujiKesimpulan(r), i = UJI_H.length - 1, t = r.trade;
+  const sel = (a, hi) => a.n ? `<span class="${C(a.mean)}">${P(a.mean)}</span> · ${(a.hit * 100).toFixed(0)}%` : '–';
+  const rows = UJI_B.map((nm, bi) => `<tr><td>${nm}</td><td class="num">${fmtP(r.bucket[i][bi].n)}</td>${UJI_H.map((h, hi) => `<td class="num">${sel(r.bucket[hi][bi], hi)}</td>`).join('')}</tr>`).join('')
+    + `<tr><td><b>Semua hari (pembanding)</b></td><td class="num">${fmtP(r.semua[i].n)}</td>${UJI_H.map((h, hi) => `<td class="num">${sel(r.semua[hi], hi)}</td>`).join('')}</tr>`;
+  const g = r.beli[i], z = r.semua[i], j = r.hindar[i];
+  const tiles = [
+    ['Saham diuji', fmtP(r.nSaham), ''], ['Jumlah trade', fmtP(t.n), ''],
+    ['Menang', t.win == null ? '–' : (t.win * 100).toFixed(0) + '%', ''],
+    ['Rata-rata per trade', P(t.mean), C(t.mean)],
+    ['Untung rata-rata', P(t.avgW), 'pos'], ['Rugi rata-rata', P(t.avgL), 'neg'],
+    ['Profit factor', t.pf == null ? '–' : t.pf === Infinity ? '∞' : t.pf.toFixed(2).replace('.', ','), ''],
+    ['Strategi &gt; beli-tahan', r.lebih + ' dari ' + r.nSaham + ' saham', '']
+  ].map(x => `<div class="tile"><span>${x[0]}</span><b class="${x[2]}">${x[1]}</b></div>`).join('');
+  const urutan = j.n ? (g.mean > j.mean ? 'Sinyal beli lebih baik daripada sinyal hindari/jual.' : 'Sinyal beli TIDAK lebih baik daripada sinyal hindari/jual.') : '';
+  const per = r.per.slice().sort((a, b) => b.total - a.total).map(p => `<tr><td>${esc(p.name)}</td><td class="num">${p.n}</td><td class="num">${p.win == null ? '–' : (p.win * 100).toFixed(0) + '%'}</td><td class="num ${C(p.total)}">${P(p.total, 1)}</td><td class="num ${C(p.bh)}">${P(p.bh, 1)}</td><td class="num neg">${P(p.mdd, 1)}</td></tr>`).join('');
+  const rentang = r.d0 && r.d1 ? `${fmtD(r.d0)} s/d ${fmtD(r.d1)}` : '';
+  return `
+    <div class="alertbox ${k.cls}"><b>${esc(k.judul)}</b>${k.alasan.length ? '<ul class="warnlist" style="margin:6px 0 0">' + k.alasan.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul>' : ''}</div>
+    <h4 style="margin:12px 0 4px">1. Apakah skor tinggi diikuti kenaikan?</h4>
+    <p class="note" style="margin:0 0 6px">Tiap sel: rata-rata return sejak harga buka hari berikutnya, lalu persen kejadian yang naik. Kolom "Obs" = jumlah pengamatan (kolom 20 hari). Bandingkan tiap baris dengan baris "Semua hari".</p>
+    <div class="tblwrap"><table><thead><tr><th>Kelompok skor</th><th class="num">Obs</th>${UJI_H.map(h => `<th class="num">${h} hari</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+    <p style="margin:8px 0 0">Sinyal beli (skor ≥ 25), 20 hari: rata-rata <b class="${C(g.mean)}">${P(g.mean)}</b> dengan ${(g.hit * 100).toFixed(0)}% menang, dibanding rata-rata semua hari <b class="${C(z.mean)}">${P(z.mean)}</b>. Selisihnya <b class="${C(g.mean - z.mean)}">${P(g.mean - z.mean)}</b>. Fee bolak-balik sekitar ${P(r.cfg.feeB + r.cfg.feeS, 2).replace('+', '')}. ${urutan}</p>
+    <p class="note" style="margin:4px 0 0">Pengamatan yang berurutan saling tumpang tindih, jadi jumlah yang benar-benar bebas kira-kira ${fmtP(Math.round(g.n / UJI_H[i]))} untuk sinyal beli 20 hari.</p>
+    <h4 style="margin:14px 0 4px">2. Simulasi trade aturan Anda</h4>
+    <p class="note" style="margin:0 0 6px">Aturan: masuk di harga buka berikutnya saat skor ≥ ${r.cfg.entryTh}, keluar saat skor ≤ ${r.cfg.exitTh} atau kena stop ${r.cfg.atrMult}× ATR, fee dihitung, trade yang masih terbuka tidak dihitung.</p>
+    <div class="tiles">${tiles}</div>
+    <p style="margin:0">Stabilitas: paruh pertama periode <b class="${C(r.h1.mean)}">${P(r.h1.mean)}</b> per trade (${r.h1.n} trade), paruh kedua <b class="${C(r.h2.mean)}">${P(r.h2.mean)}</b> (${r.h2.n} trade). Median hasil strategi ${P(r.medStrat, 1)} per saham, median beli-dan-tahan ${P(r.medBH, 1)}, median penurunan terdalam ${P(r.medMdd, 1)}.</p>
+    <details style="margin-top:10px"><summary>Hasil per saham (${r.nSaham})</summary>
+      <div class="tblwrap"><table><thead><tr><th>Saham</th><th class="num">Trade</th><th class="num">Menang</th><th class="num">Strategi</th><th class="num">Beli &amp; tahan</th><th class="num">Max DD</th></tr></thead><tbody>${per}</tbody></table></div>
+    </details>
+    <details style="margin-top:8px"><summary>Batasan uji ini (baca sebelum percaya)</summary>
+      <ul class="warnlist">
+        <li>Data ${r.nSaham} saham, rata-rata ${Math.round(r.bars)} hari${rentang ? ' (' + rentang + ')' : ''}. Periode pendek atau satu fase pasar saja bisa menipu.</li>
+        <li>Hanya saham yang saat ini ada di daftar pasar. Saham yang sudah keluar atau jatuh tidak ikut, sehingga hasil cenderung terlihat lebih bagus dari kenyataan (bias penyintas).</li>
+        <li>Tanpa slippage, antrean, batas ARA/ARB, atau saham yang sulit dijual. Eksekusi nyata biasanya lebih buruk.</li>
+        <li>Pengaturan aturan sudah pernah Anda lihat hasilnya. Mengubah-ubah angka sampai bagus akan menghasilkan hasil yang hanya cocok untuk data ini.</li>
+        <li>Hasil masa lalu tidak menjamin masa depan. Alat edukasi, bukan saran investasi.</li>
+      </ul>
+    </details>`;
+}
+function renderUji(){
+  const card = $('#ujiCard'); if (!card) return;
+  card.hidden = !SES.token; if (!SES.token) return;
+  const out = $('#ujiOut'); if (!out) return;
+  let h;
+  if (UJI.err) h = `<div class="alertbox bad">${esc(UJI.err)}</div>`;
+  else if (!UJI.res) h = '<p class="note" style="margin:0">Belum dijalankan. Tekan "Jalankan uji". Bila data pasar belum termuat, tekan dulu "Pindai ulang" pada kartu kandidat beli.</p>';
+  else h = ujiHTML(UJI.res);
+  if (out.dataset.h !== h) { out.innerHTML = h; out.dataset.h = h; }
+}
+(function(){
+  const b = document.getElementById('ujiJalan'); if (!b) return;
+  b.onclick = () => {
+    try {
+      readCfg();
+      const list = ujiData();
+      if (list.length < 5) { UJI.res = null; UJI.err = 'Data belum cukup: butuh minimal 5 saham dengan riwayat ≥ 100 hari. Muat data pasar dulu lewat "Pindai ulang" pada kartu kandidat beli.'; }
+      else { UJI.err = ''; UJI.res = ujiHitung(list, S.cfg); }
+    } catch (e) { UJI.res = null; UJI.err = 'Gagal menghitung: ' + e.message; }
+    renderUji();
+  };
+})();
+
 /* ===================== kandidat beli (pindai pasar) ===================== */
 const PASAR = {st: [], menunggu: [], total: 0, updated: '', busy: false, loaded: false, err: ''};
 const KB = {terjangkau: false, pasar: true, thPakai: 25, thDasar: 25};
@@ -2090,6 +2242,7 @@ function barisRank(r, i){
 function renderKB(){
   try { perbaruiSinyal(); } catch (e) {}
   renderPasar();
+  try { renderUji(); } catch (e) {}
   const card = $('#kbCard'); if (!card) return;
   card.hidden = !SES.token; if (!SES.token) return;
   const out = $('#kbOut'), btn = $('#kbMuat'); btn.disabled = PASAR.busy;
