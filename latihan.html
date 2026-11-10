@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ruang Latihan Robot Saham: data nyata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Tata letak: kontrol di atas, grafik lebar di kiri, skor dan latihan transaksi di kanan. Data rekaan, selalu berlabel SIMULASI. */
+:root{
+  --bg:#f3f6fa; --surface:#ffffff; --ink:#14213d; --muted:#5a6a80; --line:#d8e0ea;
+  --accent:#0b8f7d; --accent-soft:#dff3ef; --amber:#b87a00; --amber-soft:#fff3d6;
+  --good:#1b8a57; --good-soft:#dff3e7; --bad:#c43d32; --bad-soft:#fbe4e1; --blue:#2f66c9;
+  --hero:#14213d; --fd:'Sora','Plus Jakarta Sans',system-ui,sans-serif; --fb:'Plus Jakarta Sans',system-ui,sans-serif;
+  --skala:1; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c1424; --surface:#14213d; --ink:#eaf0f8; --muted:#9db0c8; --line:#2a3b5e;
+  --accent:#34d1ba; --accent-soft:#12383a; --amber:#f0b73a; --amber-soft:#3a2f12;
+  --good:#46d38b; --good-soft:#12392a; --bad:#ff7a6e; --bad-soft:#40201f; --blue:#7aa7ff; --hero:#0a1120; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0c1424; --surface:#14213d; --ink:#eaf0f8; --muted:#9db0c8; --line:#2a3b5e;
+  --accent:#34d1ba; --accent-soft:#12383a; --amber:#f0b73a; --amber-soft:#3a2f12;
+  --good:#46d38b; --good-soft:#12392a; --bad:#ff7a6e; --bad-soft:#40201f; --blue:#7aa7ff; --hero:#0a1120; color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{margin:0}
+html{font-size:calc(16px * var(--skala))}
+body{background:var(--bg);color:var(--ink);font-family:var(--fb);line-height:1.5}
+h1,h2,h3{font-family:var(--fd);margin:0}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1400px;margin:0 auto;padding:14px clamp(12px,2.5vw,28px) 40px}
+.head{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.head h1{font-size:1.25rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ribbon{background:var(--amber-soft);color:var(--amber);border:1.5px solid var(--amber);border-radius:999px;padding:2px 12px;font:700 .75rem var(--fb);letter-spacing:.04em}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.btn{border:1.5px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 13px;font-weight:600;font-size:.9rem}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#04211c}
+.btn.good{background:var(--good);border-color:var(--good);color:#fff}
+.btn.bad{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:.85rem;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#04211c}
+.ctl{display:grid;gap:10px;margin-bottom:12px}
+.ctlrow{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.ctlrow .lbl{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.play{min-width:112px;font-size:1rem}
+.tg{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:600}
+.tg input{accent-color:var(--accent);width:16px;height:16px}
+.lesson{font-size:.92rem;color:var(--muted)}
+.lesson b{color:var(--ink)}
+#toast{display:none;border-left:5px solid var(--amber);background:var(--amber-soft);border-radius:0 10px 10px 0;padding:9px 14px;font-weight:600;margin-bottom:12px}
+#toast.on{display:block}
+.cols{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(320px,1fr);gap:12px;align-items:start}
+.left,.right{display:grid;gap:12px;min-width:0}
+.read{display:flex;flex-wrap:wrap;gap:4px 22px;align-items:baseline;margin-bottom:8px}
+.read .px{font:800 1.9rem var(--fd);font-variant-numeric:tabular-nums}
+.read .px.up{color:var(--good)}.read .px.dn{color:var(--bad)}
+.read small{color:var(--muted);font-size:.8rem;font-variant-numeric:tabular-nums}
+.read b{font-variant-numeric:tabular-nums}
+.cv{position:relative}
+canvas{display:block;width:100%}
+#cvMain{height:400px;touch-action:pan-y}
+#cvScore{height:130px}
+.tip{position:absolute;pointer-events:none;background:var(--hero);color:#fff;border-radius:10px;padding:8px 10px;font-size:.78rem;line-height:1.4;display:none;z-index:3;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cap{font-size:.74rem;color:var(--muted);margin:6px 0 0}
+.sub{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px}
+.big{font-family:var(--fd);font-weight:800;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 12px;font-weight:700;font-size:.85rem;border:1.5px solid currentColor}
+.pill.good{color:var(--good);background:var(--good-soft)}.pill.bad{color:var(--bad);background:var(--bad-soft)}.pill.warn{color:var(--amber);background:var(--amber-soft)}
+.gauge{position:relative;height:22px;border-radius:7px;display:flex;margin:30px 0 22px}
+.gauge span{flex:none;height:100%}
+.gauge span:first-child{border-radius:7px 0 0 7px}.gauge span:nth-child(5){border-radius:0 7px 7px 0}
+.gauge .mk{position:absolute;top:-28px;transform:translateX(-50%);transition:left .6s cubic-bezier(.2,.7,.2,1);font:800 1rem var(--fd)}
+.gauge .mk::after{content:"";display:block;margin:1px auto 0;border:6px solid transparent;border-top-color:var(--ink)}
+.gauge .tk{position:absolute;top:26px;transform:translateX(-50%);font-size:.68rem;color:var(--muted)}
+.comp{display:grid;grid-template-columns:minmax(100px,1.3fr) minmax(70px,1.6fr) 52px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);font-size:.8rem}
+.meter{position:relative;height:10px;background:var(--line);border-radius:5px}
+.meter::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:2px;background:var(--muted)}
+.meter i{position:absolute;top:0;bottom:0;border-radius:5px;transition:width .5s,left .5s}
+.val{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+table.t{width:100%;border-collapse:collapse;font-size:.85rem}
+table.t td{padding:5px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;vertical-align:top}
+table.t td:first-child{color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row.sb{justify-content:space-between}
+label.f{display:grid;gap:3px;font-size:.75rem;color:var(--muted);font-weight:600}
+label.f input{width:100%;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface)}
+.cek{list-style:none;padding:0;margin:6px 0 0;font-size:.82rem}
+.cek li{display:flex;gap:7px;padding:2px 0}
+.cek .ok{color:var(--good);font-weight:800}.cek .no{color:var(--bad);font-weight:800}
+.log{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto;font-size:.82rem}
+.log li{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}
+.log time{color:var(--muted);flex:none;width:62px;font-variant-numeric:tabular-nums}
+.log .good{color:var(--good)}.log .bad{color:var(--bad)}.log .warn{color:var(--amber)}
+.covered{position:relative}
+.cover{display:none;position:absolute;inset:0;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(7px);border-radius:12px;place-items:center;text-align:center;padding:16px;z-index:2}
+.covered.hid .cover{display:grid}
+.empty{color:var(--muted);font-size:.85rem}
+[hidden]{display:none!important}
+.realbox{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+select.sl{padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);min-width:130px}
+textarea.csv{width:100%;min-height:90px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface);padding:8px;font:12px ui-monospace,monospace}
+.err{color:var(--bad);font-weight:600}
+.disc{color:var(--muted);font-size:.78rem;margin-top:14px}
+@media (max-width:1000px){.cols{grid-template-columns:1fr}#cvMain{height:320px}}
+@media (prefers-reduced-motion:reduce){.gauge .mk,.meter i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>Ruang Latihan Robot Saham <span class="ribbon" id="ribbon">SIMULASI · DATA REKAAN</span></h1>
+    <div class="tools">
+      <button class="btn" id="bTeks" type="button" aria-pressed="false">Teks besar</button>
+      <button class="btn" id="bTema" type="button" aria-pressed="false">Tema gelap</button>
+      <button class="btn" id="bLayar" type="button">Layar penuh</button>
+    </div>
+  </div>
+
+  <section class="card ctl" aria-label="Kontrol simulasi">
+    <div class="ctlrow"><span class="lbl">Sumber data</span><div class="chips" id="src"><button class="chip" type="button" data-m="sim" aria-pressed="true">Rekaan (skenario)</button><button class="chip" type="button" data-m="real" aria-pressed="false">Data nyata (riwayat harian)</button></div></div>
+    <div class="ctlrow" id="scnRow"><span class="lbl">Skenario</span><div class="chips" id="scn"></div></div>
+    <div class="realbox" id="realBox" hidden>
+      <div class="ctlrow"><button class="btn primary" id="bLoad" type="button">Muat watchlist dari robot saya</button>
+        <label class="btn" style="cursor:pointer">Impor file CSV<input id="csvFile" type="file" accept=".csv,.txt,text/csv" hidden></label>
+        <button class="btn" id="bPaste" type="button">Tempel data CSV</button>
+        <span class="empty" id="realStat"></span></div>
+      <div id="pasteBox" hidden><textarea class="csv" id="csvText" placeholder="Tanggal,Buka,Tinggi,Rendah,Tutup,Volume&#10;2026-01-02,5000,5050,4980,5025,12000000"></textarea>
+        <div class="row" style="margin-top:6px"><input id="csvName" class="sl" placeholder="Nama saham (opsional)" style="width:180px"><button class="btn" id="bCsvOk" type="button">Pakai data ini</button></div></div>
+      <div class="ctlrow" id="realCtl" hidden><span class="lbl">Saham</span><select class="sl" id="realSel"></select>
+        <span class="lbl">Putar</span><div class="chips" id="realDays"></div>
+        <label class="tg"><input type="checkbox" id="tAcak"> Titik awal acak</label>
+        <label class="tg"><input type="checkbox" id="tHide"> Sembunyikan nama dan tanggal</label></div>
+    </div>
+    <div class="lesson" id="lesson"></div>
+    <div class="ctlrow">
+      <button class="btn primary play" id="bPlay" type="button">&#9654; Mulai</button>
+      <button class="btn" id="bStep" type="button">Satu hari &rarr;</button>
+      <button class="btn" id="bReset" type="button">Ulang</button>
+      <span class="lbl">Kecepatan</span><div class="chips" id="spd"></div>
+      <label class="tg" id="seedBox"><span class="lbl" style="margin:0">Seed</span><input id="seed" type="number" value="7" style="width:76px;padding:5px 7px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface)"></label>
+      <button class="btn" id="bAcak" type="button">Acak baru</button>
+    </div>
+    <div class="ctlrow">
+      <label class="tg"><input type="checkbox" id="tJeda" checked> Jeda otomatis saat ada kejadian</label>
+      <label class="tg"><input type="checkbox" id="tHalus" checked> Gerakan halus</label>
+      <label class="tg"><input type="checkbox" id="tTebak"> Mode tebak (sembunyikan jawaban robot)</label>
+    </div>
+  </section>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <div class="cols">
+    <div class="left">
+      <section class="card" aria-label="Grafik harga">
+        <div class="read" id="read"></div>
+        <div class="cv"><canvas id="cvMain" aria-label="Grafik candlestick harga simulasi" role="img"></canvas><div class="tip" id="tip"></div></div>
+        <p class="cap" id="capChart">Hijau = harga naik pada hari itu, merah = turun. Garis kuning SMA20, biru SMA50. Semua harga di sini rekaan komputer, bukan harga pasar.</p>
+        <div class="sub">Skor robot dari hari ke hari</div>
+        <div class="covered" id="scoreCv"><canvas id="cvScore" aria-label="Grafik skor robot" role="img"></canvas>
+          <div class="cover"><div><b>Mode tebak aktif</b><p class="empty" style="margin:4px 0 10px">Tebak dulu bersama kelas, lalu buka jawabannya.</p><button class="btn primary" type="button" data-reveal>Tampilkan jawaban robot</button></div></div></div>
+      </section>
+    </div>
+    <div class="right">
+      <section class="card covered" id="scoreCard" aria-label="Skor robot">
+        <div class="row sb"><h2 style="font-size:1rem">Skor robot</h2><span id="verdict"></span></div>
+        <div id="gaugeBox"></div>
+        <div id="comps"></div>
+        <div class="cover"><div><b>Mode tebak aktif</b><p class="empty" style="margin:4px 0 10px">Skor dan sinyal disembunyikan.</p><button class="btn primary" type="button" data-reveal>Tampilkan jawaban robot</button></div></div>
+      </section>
+      <section class="card" aria-label="Latihan transaksi">
+        <div class="row sb"><h2 style="font-size:1rem">Latihan transaksi</h2><span class="empty" id="modalInfo"></span></div>
+        <div class="row" style="margin:8px 0">
+          <label class="f" style="width:120px">Modal latihan (Rp)<input id="pModal" type="number" value="10000000" min="100000" step="500000"></label>
+          <label class="f" style="width:84px">Risiko (%)<input id="pRisk" type="number" value="2" min="0.1" max="10" step="0.1"></label>
+          <label class="f" style="width:84px">Pengali ATR<input id="pMult" type="number" value="2" min="0.5" max="5" step="0.5"></label>
+        </div>
+        <div id="trade"></div>
+      </section>
+      <section class="card" aria-label="Kejadian"><h2 style="font-size:1rem;margin-bottom:6px">Kejadian</h2><ul class="log" id="log"></ul></section>
+      <section class="card" aria-label="Ringkasan sesi"><h2 style="font-size:1rem;margin-bottom:6px">Ringkasan sesi</h2><div id="sum"></div></section>
+    </div>
+  </div>
+  <p class="disc" id="disc"></p>
+</div>
+
+<script>
+/* mesin hitung: disalin apa adanya dari aplikasi robot (indikator, skor, tick) */
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function fmtP(x){ return Math.round(x).toLocaleString("id-ID"); }
+const W = {short:15, mid:20, long:15, rsi:15, macd:20, brk:10, vol:10};
+function sma(a, n){
+  const r = Array(a.length).fill(null); let s = 0;
+  for (let i = 0; i < a.length; i++) { s += a[i]; if (i >= n) s -= a[i - n]; if (i >= n - 1) r[i] = s / n; }
+  return r;
+}
+function ema(a, n){
+  const r = Array(a.length).fill(null), k = 2 / (n + 1);
+  let p = null, s = 0, cnt = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] == null) continue;
+    if (p == null) { s += a[i]; cnt++; if (cnt === n) { p = s / n; r[i] = p; } }
+    else { p = a[i] * k + p * (1 - k); r[i] = p; }
+  }
+  return r;
+}
+function rsi(c, n = 14){
+  const r = Array(c.length).fill(null);
+  if (c.length <= n) return r;
+  let g = 0, l = 0;
+  for (let i = 1; i <= n; i++) { const d = c[i] - c[i-1]; if (d >= 0) g += d; else l -= d; }
+  g /= n; l /= n;
+  r[n] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  for (let i = n + 1; i < c.length; i++) {
+    const d = c[i] - c[i-1];
+    g = (g * (n-1) + Math.max(d, 0)) / n; l = (l * (n-1) + Math.max(-d, 0)) / n;
+    r[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l);
+  }
+  return r;
+}
+function atr(d, n = 14){
+  const len = d.c.length, r = Array(len).fill(null), tr = [d.h[0] - d.l[0]];
+  for (let i = 1; i < len; i++) tr.push(Math.max(d.h[i] - d.l[i], Math.abs(d.h[i] - d.c[i-1]), Math.abs(d.l[i] - d.c[i-1])));
+  if (len < n) return r;
+  let a = 0; for (let i = 0; i < n; i++) a += tr[i]; a /= n; r[n-1] = a;
+  for (let i = n; i < len; i++) { a = (a * (n-1) + tr[i]) / n; r[i] = a; }
+  return r;
+}
+function boll(c, n = 20, k = 2){
+  const m = sma(c, n), u = Array(c.length).fill(null), l = Array(c.length).fill(null);
+  for (let i = n - 1; i < c.length; i++) {
+    let s = 0; for (let j = i - n + 1; j <= i; j++) s += (c[j] - m[i]) ** 2;
+    const sd = Math.sqrt(s / n); u[i] = m[i] + k * sd; l[i] = m[i] - k * sd;
+  }
+  return {m, u, l};
+}
+function rsiVal(r){
+  if (r >= 70) return Math.max(0.8 - (r - 70) / 15 * 1.1, -0.4);
+  if (r >= 50) return (r - 50) / 20 * 0.8;
+  if (r >= 30) return -(50 - r) / 20 * 0.8;
+  return Math.min(-0.8 + (30 - r) / 10, 0.2);
+}
+function scoreAt(i, d, I){
+  if (i < 34) return null;
+  const c = d.c[i], comps = [];
+  const add = (k, name, v, why) => { if (v != null) comps.push({k, name, w: W[k], v, why}); };
+  // tren pendek
+  const s20 = I.sma20[i], s20p = I.sma20[i-3];
+  if (s20 != null && s20p != null) {
+    const up = s20 > s20p;
+    add('short', 'Tren pendek (SMA20)', (c > s20 ? 0.6 : -0.6) + (up ? 0.4 : -0.4),
+      `Harga ${c > s20 ? 'di atas' : 'di bawah'} SMA20 (${fmtP(s20)}), garis SMA20 ${up ? 'naik' : 'turun'}.`);
+  }
+  const s50 = I.sma50[i];
+  if (s50 != null) add('mid', 'Tren menengah (SMA50)', (c > s50 ? 0.5 : -0.5) + (s20 > s50 ? 0.5 : -0.5),
+      `Harga ${c > s50 ? 'di atas' : 'di bawah'} SMA50 (${fmtP(s50)}); SMA20 ${s20 > s50 ? 'di atas' : 'di bawah'} SMA50.`);
+  const s200 = I.sma200[i];
+  if (s200 != null) add('long', 'Tren panjang (SMA200)', (c > s200 ? 0.5 : -0.5) + (s50 > s200 ? 0.5 : -0.5),
+      `Harga ${c > s200 ? 'di atas' : 'di bawah'} SMA200 (${fmtP(s200)}); SMA50 ${s50 > s200 ? 'di atas' : 'di bawah'} SMA200.`);
+  const r = I.rsi[i];
+  if (r != null) {
+    let t = r >= 70 ? 'sudah jenuh beli, rawan koreksi' : r >= 50 ? 'momentum naik sehat' : r >= 30 ? 'momentum lemah' : 'jenuh jual, mungkin memantul tapi belum terkonfirmasi';
+    add('rsi', 'Momentum (RSI14)', rsiVal(r), `RSI ${r.toFixed(0)}: ${t}.`);
+  }
+  const h = I.hist[i], hp = I.hist[i-1];
+  if (h != null && hp != null) {
+    let v, t;
+    if (h > 0 && h > hp) { v = 1; t = 'histogram positif dan menguat'; }
+    else if (h > 0) { v = 0.3; t = 'histogram positif tapi melemah'; }
+    else if (h > hp) { v = -0.3; t = 'histogram negatif tapi mulai membaik'; }
+    else { v = -1; t = 'histogram negatif dan memburuk'; }
+    add('macd', 'MACD (12,26,9)', v, 'MACD: ' + t + '.');
+  }
+  if (i >= 20) {
+    let hh = -Infinity, ll = Infinity;
+    for (let j = i - 20; j < i; j++) { hh = Math.max(hh, d.h[j]); ll = Math.min(ll, d.l[j]); }
+    let v, t;
+    if (c > hh) { v = 1; t = `breakout, harga menembus high 20 hari (${fmtP(hh)})`; }
+    else if (c < ll) { v = -1; t = `breakdown, harga menembus low 20 hari (${fmtP(ll)})`; }
+    else { const pos = (c - ll) / ((hh - ll) || 1); v = (pos - 0.5) * 1.2; t = `harga di ${(pos * 100).toFixed(0)}% rentang 20 hari (${fmtP(ll)}–${fmtP(hh)})`; }
+    add('brk', 'Posisi / breakout 20 hari', v, t.charAt(0).toUpperCase() + t.slice(1) + '.');
+  }
+  if (i >= 20) {
+    let s = 0; for (let j = i - 20; j < i; j++) s += d.v[j]; s /= 20;
+    if (s > 0 && d.v[i] > 0) {
+      const vr = d.v[i] / s, dir = Math.sign(c - d.c[i-1]);
+      add('vol', 'Konfirmasi volume', dir * clamp((vr - 0.8) / 1.2, 0, 1),
+        `Volume ${vr.toFixed(1).replace('.', ',')}× rata-rata 20 hari; ${vr < 0.8 ? 'sepi, tidak memberi konfirmasi' : dir >= 0 ? 'ramai saat naik (positif)' : 'ramai saat turun (negatif)'}.`);
+    }
+  }
+  const tw = comps.reduce((a, b) => a + b.w, 0);
+  if (!tw) return null;
+  const total = comps.reduce((a, b) => a + b.w * b.v, 0) / tw * 100;
+  return {total, comps};
+}
+function verdict(s){
+  if (s >= 50) return {t:'BELI KUAT', cls:'good', ic:'▲▲'};
+  if (s >= 25) return {t:'BELI / AKUMULASI', cls:'good', ic:'▲'};
+  if (s > -25) return {t:'TUNGGU', cls:'warn', ic:'●'};
+  if (s > -50) return {t:'HINDARI / KURANGI', cls:'bad', ic:'▼'};
+  return {t:'JUAL / HINDARI', cls:'bad', ic:'▼▼'};
+}
+function analyze(d){
+  const c = d.c, n = c.length;
+  const I = {sma20: sma(c,20), sma50: sma(c,50), sma200: sma(c,200), rsi: rsi(c), atr: atr(d), bb: boll(c)};
+  const e12 = ema(c,12), e26 = ema(c,26);
+  I.macd = c.map((_, i) => e12[i] != null && e26[i] != null ? e12[i] - e26[i] : null);
+  I.sig = ema(I.macd, 9);
+  I.hist = I.macd.map((m, i) => m != null && I.sig[i] != null ? m - I.sig[i] : null);
+  I.sc = Array.from({length: n}, (_, i) => scoreAt(i, d, I));
+  return I;
+}
+function tick(p){ return p < 200 ? 1 : p < 500 ? 2 : p < 2000 ? 5 : p < 5000 ? 10 : 25; }
+const tDown = p => Math.floor(p / tick(p) + 1e-9) * tick(p);
+const tUp = p => Math.ceil(p / tick(p) - 1e-9) * tick(p);
+/* rencana dan keputusan posisi: dari halaman peragaan (sudah dicocokkan dengan aplikasi) */
+function rencana(cfg){
+  const e = tUp(cfg.close);
+  const stop = tDown(Math.max(e - cfg.atrMult * cfg.atr, tick(e)));
+  const risk = e - stop;
+  if (!(risk > 0)) return null;
+  const t1 = tUp(e + 2 * risk), t2 = tUp(e + 3 * risk);
+  const riskAmt = cfg.cap * cfg.riskPct / 100;
+  const byRisk = Math.floor(riskAmt / (risk * 100));
+  const byCash = Math.floor(cfg.cap / (e * 100 * (1 + cfg.feeB)));
+  const lots = Math.max(0, Math.min(byRisk, byCash));
+  return {e, stop, risk, t1, t2, riskAmt, byRisk, byCash, lots, perLot: risk * 100};
+}
+function keputusan(p){
+  const R0 = p.atrMult * p.atr, gR = R0 > 0 ? (p.price - p.e) / R0 : null;
+  const sh = p.lots * 100, cost = p.e * sh, fb = p.feeB, fs = p.feeS;
+  const stop = p.stop > 0 ? p.stop : tDown(Math.max(p.e - R0, tick(p.e)));
+  const tp = p.tp > 0 ? p.tp : (stop < p.e ? tUp(p.e + 2 * (p.e - stop)) : null);
+  const stopAman = !(stop && p.price <= stop), sinyalJual = p.skor <= p.exitTh;
+  const targetCapai = !!(tp && p.price >= tp), dekatTarget = !!(tp && p.price >= tp * 0.97);
+  const impas = tUp(p.e * (1 + fb + fs) + 1e-9), trail = tDown(p.price - R0);
+  let stopBaru = stop;
+  if (gR != null && gR >= 1) stopBaru = Math.max(stopBaru, impas);
+  if (gR != null && gR >= 1.5 && trail) stopBaru = Math.max(stopBaru, trail);
+  if (stopBaru >= p.price) stopBaru = stop;
+  const naikStop = stopBaru > stop;
+  let aksi, cls, alasan, lotJual = 0;
+  if (!stopAman) { aksi = 'JUAL'; cls = 'bad'; alasan = 'Harga menyentuh atau di bawah stop. Patuhi rencana: keluar untuk membatasi rugi.'; lotJual = p.lots; }
+  else if (sinyalJual) { aksi = 'JUAL'; cls = 'bad'; alasan = 'Skor robot (' + Math.round(p.skor) + ') sudah di bawah atau sama dengan batas keluar (' + p.exitTh + ').'; lotJual = p.lots; }
+  else if (targetCapai && p.lots >= 2) { aksi = 'JUAL SEBAGIAN'; cls = 'good'; alasan = 'Target tercapai: jual separuh, sisanya ditahan dengan stop dinaikkan.'; lotJual = Math.floor(p.lots / 2); }
+  else if (targetCapai) { aksi = 'AMANKAN UNTUNG'; cls = 'good'; alasan = 'Target tercapai dan hanya 1 lot: jual semua, atau tahan dengan stop dinaikkan bila tren masih kuat.'; lotJual = p.lots; }
+  else if (naikStop) { aksi = 'TAHAN, NAIKKAN STOP'; cls = 'good'; alasan = 'Untung sudah ' + gR.toFixed(1) + '× risiko awal. Naikkan stop agar untung terkunci.'; }
+  else { aksi = 'TAHAN'; cls = 'good'; alasan = 'Masih di antara stop dan target, tidak ada sinyal jual.'; }
+  const sisaModal = p.cap > 0 ? p.cap - cost : 0;
+  const byCash = sisaModal > 0 ? Math.floor(sisaModal / (p.price * 100 * (1 + fb))) : 0;
+  const stopT = naikStop ? stopBaru : stop, batasRugi = p.cap * p.riskPct / 100;
+  const rugiLama = stopT > 0 && stopT < p.e ? (p.e - stopT) * sh : 0;
+  const perLot = stopT > 0 && stopT < p.price ? (p.price - stopT) * 100 + p.price * 100 * fb + stopT * 100 * fs : 0;
+  const byRisk = perLot > 0 && batasRugi > rugiLama ? Math.floor((batasRugi - rugiLama) / perLot) : 0;
+  const syarat = {untung: gR != null && gR >= 1, tren: p.sma20Atas && p.skor >= p.entryTh, target: !dekatTarget, aman: stopAman && !sinyalJual, dana: byCash >= 1, risiko: byRisk >= 1};
+  const bolehTambah = Object.values(syarat).every(Boolean);
+  const bersih = p.lots * 100 * (p.price - p.e) - cost * fb - p.price * sh * fs;
+  return {aksi, cls, alasan, gR, R0, stop, tp, stopBaru, naikStop, impas, lotJual, syarat, bolehTambah, byCash, byRisk,
+    tambahLot: bolehTambah ? Math.max(0, Math.min(byRisk, byCash, p.lots)) : 0, bersih};
+}
+
+/* ---------- simulasi harga rekaan ---------- */
+let HIST = 260; const VIS = 80, BAR_MS = 2000, NSUB = 30;
+const SCEN = {
+ naik:{n:'Tren naik', kode:'SIMA', p0:2400, seg:[[260,.0006,.012],[120,.0014,.011]],
+   les:'<b>Pelajaran:</b> di tren naik rapi skor tinggi bertahan. Perhatikan kapan stop dinaikkan dan target pertama tercapai.'},
+ turun:{n:'Tren turun', kode:'SIMB', p0:3100, seg:[[260,.0002,.012],[120,-.0016,.014]],
+   les:'<b>Pelajaran:</b> skor rendah berarti tunggu atau hindari. Banyak pemula kena jebakan membeli karena harga sudah murah.'},
+ samping:{n:'Sideways', kode:'SIMC', p0:1800, seg:[[260,.0004,.011],[120,0,.009,.06]],
+   les:'<b>Pelajaran:</b> harga bolak-balik tanpa arah. Sinyal sering berganti, jadi stop sering kena. Sabar menunggu arah jelas.'},
+ pantul:{n:'Pantulan', kode:'SIMD', p0:2700, seg:[[260,.0005,.012],[40,-.004,.016],[30,.003,.016],[50,-.001,.014]],
+   les:'<b>Pelajaran:</b> turun tajam lalu memantul. Skor masih negatif saat harga naik: pantulan belum tentu balik arah.'},
+ breakout:{n:'Breakout', kode:'SIME', p0:2200, seg:[[260,.0004,.010],[60,0,.006,.12],[60,.004,.015]],
+   les:'<b>Pelajaran:</b> konsolidasi sempit lalu menembus batas atas dengan volume ramai. Lihat komponen breakout dan volume.'},
+ gelembung:{n:'Naik tajam lalu koreksi', kode:'SIMF', p0:2500, seg:[[260,.0006,.012],[50,.005,.016],[70,-.004,.02]],
+   les:'<b>Pelajaran:</b> RSI di atas 70 menurunkan nilai momentum. Naik terlalu cepat sering diikuti koreksi.'}
+};
+function rng(seed){ let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const gauss = r => { let u = 0; while (!u) u = r(); const v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const snap = p => Math.max(tick(p), Math.round(p / tick(p)) * tick(p));
+function genSeries(sc, seed){
+  const r = rng(seed * 7919 + 13), bars = []; let p = sc.p0;
+  for (const [cnt, dr, vol, mr] of sc.seg) {
+    const anchor = Math.log(p);
+    for (let k = 0; k < cnt; k++) {
+      const o = snap(p * (1 + (r() - .5) * .004));
+      let lr = dr + vol * gauss(r); if (mr) lr -= mr * (Math.log(p) - anchor);
+      const c = snap(o * Math.exp(lr));
+      const hi = snap(Math.max(o, c) * (1 + Math.abs(gauss(r)) * vol * .55)), lo = snap(Math.min(o, c) * (1 - Math.abs(gauss(r)) * vol * .55));
+      const v = Math.round(1e6 * Math.exp(.3 * gauss(r)) * (.8 + .9 * Math.abs(lr) / vol) / 100) * 100;
+      bars.push({o, h: Math.max(hi, o, c), l: Math.min(lo, o, c), c, v});
+      p = c;
+    }
+  }
+  return bars;
+}
+function makePath(b, seed, idx){
+  const r = rng(seed * 104729 + idx * 31 + 5), N = NSUB;
+  const hFirst = r() < .5, t1 = .15 + .3 * r(), t2 = t1 + .2 + .3 * r();
+  const wp = [[0, b.o], [Math.round(Math.min(t1, .9) * N), hFirst ? b.h : b.l], [Math.round(Math.min(t2, .95) * N), hFirst ? b.l : b.h], [N, b.c]];
+  const pts = [], range = Math.max(b.h - b.l, tick(b.c));
+  for (let k = 0; k <= N; k++) {
+    let s = 0; while (s < 2 && wp[s + 1][0] < k) s++;
+    const [k0, p0] = wp[s], [k1, p1] = wp[s + 1], f = k1 > k0 ? (k - k0) / (k1 - k0) : 1;
+    let pr = p0 + (p1 - p0) * f + Math.sin(Math.PI * f) * range * .07 * gauss(r);
+    pr = Math.min(b.h, Math.max(b.l, pr));
+    pts.push(wp.some(w => w[0] === k) ? wp.find(w => w[0] === k)[1] : snap(pr));
+  }
+  pts[0] = b.o; pts[N] = b.c;
+  return pts.map(x => Math.min(b.h, Math.max(b.l, x)));
+}
+
+/* ---------- pembantu ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const fmt = n => Math.round(n).toLocaleString('id-ID');
+const f1 = (n, dg = 1) => n.toFixed(dg).replace('.', ',');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const num = id => { const v = parseFloat($('#' + id).value); return isFinite(v) ? v : 0; };
+
+/* ---------- status ---------- */
+let scn = 'naik', seed = 7, speed = 1, playing = false, stepOnce = false, jeda = true, halus = !REDUCE, tebak = false, reveal = false;
+let bars, d, I, fi, F, path, prog, lastIdx, prevPx, dirTick = 0, tFlash = 0, hoverJ = null, ended = false;
+let dates = null, SRC = {mode: 'sim'}, REAL = {list: [], cur: 0, days: 60, rand: false, hide: false, E: 0};
+let pos = null, trades = [], marks = [], realized = 0, events = [], lastGroup = null, lastAksi = null, lastRsiHot = false, lastBrk = 0;
+let yMinT = 0, yMaxT = 0, yMin = 0, yMax = 0, firstDraw = true;
+
+function capNow(){ return num('pModal') + realized; }
+function lastScore(){ const s = I.sc[I.sc.length - 1]; return s ? s.total : 0; }
+function cfgNow(){ return {riskPct: num('pRisk'), atrMult: num('pMult') || 2, feeB: .0015, feeS: .0025}; }
+function curPx(){ return F.c; }
+function grp(s){ return s >= 25 ? 'beli' : s > -25 ? 'tunggu' : 'hindari'; }
+
+const BLN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function tglPendek(s){ const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? (+m[3]) + ' ' + BLN[+m[2] - 1] : ''; }
+function tglPenuh(s){ const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? (+m[3]) + ' ' + BLN[+m[2] - 1] + ' ' + m[1] : ''; }
+const isReal = () => SRC.mode === 'real' && REAL.list[REAL.cur] && dates;
+function lbl(j){ return isReal() && !REAL.hide ? tglPendek(dates[j]) : 'Hari ' + (j + 1); }
+function lblFull(j){ return isReal() && !REAL.hide ? tglPenuh(dates[j]) : 'Hari ' + (j + 1); }
+function pickEnd(){ const R = REAL.list[REAL.cur]; if (!R) return; const len = R.bars.length, L = REAL.days; const lo = Math.min(len, 100 + L); REAL.E = REAL.rand ? lo + Math.floor(Math.random() * (len - lo + 1)) : len; }
+function prepBars(){
+  if (SRC.mode === 'real' && REAL.list[REAL.cur]) {
+    const R = REAL.list[REAL.cur], len = R.bars.length, L = Math.min(REAL.days, len - 60);
+    if (!REAL.E || REAL.E > len || REAL.E - L < 40) pickEnd();
+    const E = REAL.E; bars = R.bars.slice(0, E); dates = R.dates.slice(0, E); HIST = E - L;
+  } else { bars = genSeries(SCEN[scn], seed); dates = null; HIST = 260; }
+}
+function startSession(){
+  prepBars();
+  d = {o: [], h: [], l: [], c: [], v: []};
+  for (let i = 0; i < HIST; i++) { const b = bars[i]; d.o.push(b.o); d.h.push(b.h); d.l.push(b.l); d.c.push(b.c); d.v.push(b.v); }
+  I = analyze(d); fi = HIST; ended = false; playing = false; stepOnce = false;
+  pos = null; trades = []; marks = []; realized = 0; events = []; hoverJ = null; firstDraw = true; reveal = false;
+  lastGroup = grp(lastScore()); lastAksi = null; lastRsiHot = (I.rsi[HIST - 1] || 0) >= 70; lastBrk = 0;
+  beginBar();
+  logEv(isReal() ? 'Sesi dimulai: putar ulang riwayat nyata' : 'Sesi dimulai: ' + SCEN[scn].n + ' (seed ' + seed + ')', 'warn');
+  $('#toast').classList.remove('on');
+  renderAll(); setPlayBtn();
+}
+function beginBar(){
+  const b = bars[fi];
+  path = makePath(b, seed, fi); prog = 0; lastIdx = 0; prevPx = d.c[d.c.length - 1];
+  F = {o: b.o, h: b.o, l: b.o, c: b.o, v: 0};
+}
+function logEv(msg, cls){ events.unshift({t: lbl(Math.min(fi, bars.length - 1)), msg, cls: cls || ''}); if (events.length > 60) events.pop(); renderLog(); }
+function pauseWhy(msg){ if (!jeda) return; playing = false; stepOnce = false; showToast(msg + ' Tekan Spasi atau tombol Lanjut.'); setPlayBtn(); }
+function showToast(m){ const t = $('#toast'); t.textContent = m; t.classList.add('on'); }
+
+/* ---------- loop ---------- */
+let tPrev = 0, tThrottle = 0;
+function frame(now){
+  const dt = Math.min(now - (tPrev || now), 100); tPrev = now;
+  if (playing && !ended) {
+    const dur = BAR_MS / speed;
+    if (halus) {
+      prog += dt / dur;
+      const k = Math.min(NSUB, Math.floor(prog * NSUB));
+      while (lastIdx < k) { lastIdx++; applyTick(path[lastIdx], lastIdx / NSUB); if (!playing) break; }
+      if (prog >= 1 && playing) closeBar();
+    } else {
+      prog += dt / (dur * .5);
+      if (prog >= 1) {
+        const b = bars[fi]; F.h = b.h; F.l = b.l; applyTick(b.c, 1); F.h = b.h; F.l = b.l;
+        if (playing) closeBar();
+      }
+    }
+  }
+  if (now - tThrottle > 220) { tThrottle = now; renderTrade(); renderRead(); }
+  drawMain(now); drawScore();
+  requestAnimationFrame(frame);
+}
+function applyTick(p, frac){
+  if (p !== F.c) { dirTick = p > F.c ? 1 : -1; tFlash = performance.now(); }
+  F.c = p; F.h = Math.max(F.h, p); F.l = Math.min(F.l, p); F.v = Math.round(bars[fi].v * frac);
+  if (pos) {
+    if (p <= pos.stop) { const lots = pos.lots, sp = pos.stop; sell(lots, p, 'Stop kena'); pauseWhy('Harga menyentuh stop (Rp ' + fmt(sp) + ').'); return; }
+    if (!pos.tpHit && pos.tp && p >= pos.tp) { pos.tpHit = true; logEv('Target tercapai di Rp ' + fmt(p), 'good'); pauseWhy('Target tercapai. Lihat saran robot: jual sebagian atau naikkan stop.'); }
+  }
+}
+function closeBar(){
+  const b = bars[fi];
+  d.o.push(b.o); d.h.push(b.h); d.l.push(b.l); d.c.push(b.c); d.v.push(b.v);
+  I = analyze(d); fi++;
+  const n = I.sc.length - 1, s = I.sc[n];
+  if (s) {
+    const v = verdict(s.total), g = grp(s.total);
+    if (g !== lastGroup) { logEv('Skor ' + f1(s.total, 0) + ': ' + v.t, v.cls); const from = lastGroup; lastGroup = g; pauseWhy('Sinyal berubah dari ' + from + ' ke ' + g + ' (skor ' + f1(s.total, 0) + ', ' + v.t + ').'); }
+    const hot = (I.rsi[n] || 0) >= 70; if (hot && !lastRsiHot) logEv('RSI naik di atas 70: mulai panas', 'warn'); lastRsiHot = hot;
+    const bk = (s.comps.find(c => c.k === 'brk') || {}).v;
+    const bs = bk === 1 ? 1 : bk === -1 ? -1 : 0;
+    if (bs !== lastBrk) { if (bs === 1) logEv('Breakout: harga menembus high 20 hari', 'good'); else if (bs === -1) logEv('Breakdown: harga menembus low 20 hari', 'bad'); lastBrk = bs; }
+    if (pos) { const k = posDecision(); if (lastAksi && k.aksi !== lastAksi) { logEv('Keputusan posisi: ' + k.aksi, k.cls); pauseWhy('Keputusan posisi berubah: ' + k.aksi + '.'); } lastAksi = k.aksi; }
+  }
+  renderScore();
+  if (fi >= bars.length) { ended = true; playing = false; stepOnce = false; showToast('Sesi selesai. Lihat ringkasan, lalu tekan Ulang atau pilih skenario lain.'); logEv('Sesi selesai', 'warn'); setPlayBtn(); renderAll(); return; }
+  beginBar();
+  if (stepOnce) { stepOnce = false; playing = false; setPlayBtn(); }
+}
+
+/* ---------- transaksi ---------- */
+function atrNow(){ return I.atr[I.atr.length - 1] || 0; }
+function livePlan(){ const c = cfgNow(); return rencana({cap: capNow(), riskPct: c.riskPct, atrMult: c.atrMult, feeB: c.feeB, close: curPx(), atr: atrNow()}); }
+function posDecision(){
+  const c = cfgNow(), p = curPx(), s20 = I.sma20[I.sma20.length - 1];
+  return keputusan({e: pos.e, lots: pos.lots, price: p, atr: atrNow(), atrMult: c.atrMult, stop: pos.stop, tp: pos.tp, skor: lastScore(), exitTh: 0, entryTh: 25, sma20Atas: s20 != null && p > s20, cap: capNow(), riskPct: c.riskPct, feeB: c.feeB, feeS: c.feeS});
+}
+function buy(){
+  if (pos || ended) return; const pl = livePlan(); if (!pl || pl.lots < 1) return;
+  pos = {e: pl.e, lots: pl.lots, stop: pl.stop, tp: pl.t1, tpHit: false}; lastAksi = null;
+  marks.push({j: fi, side: 'b', p: pl.e});
+  logEv('Beli ' + pl.lots + ' lot di Rp ' + fmt(pl.e) + ', stop Rp ' + fmt(pl.stop) + ', target Rp ' + fmt(pl.t1), 'good');
+  lastAksi = posDecision().aksi; renderAll();
+}
+function sell(lots, price, why){
+  if (!pos) return; lots = Math.min(lots, pos.lots); const c = cfgNow();
+  const net = (price - pos.e) * lots * 100 - pos.e * lots * 100 * c.feeB - price * lots * 100 * c.feeS;
+  realized += net; trades.push({lots, e: pos.e, x: price, net, why, hari: fi + 1}); marks.push({j: fi, side: 's', p: price});
+  logEv((why || 'Jual') + ': ' + lots + ' lot di Rp ' + fmt(price) + ' (' + (net >= 0 ? '+' : '−') + 'Rp ' + fmt(Math.abs(net)) + ')', net >= 0 ? 'good' : 'bad');
+  pos.lots -= lots; if (pos.lots <= 0) { pos = null; lastAksi = null; }
+  renderAll();
+}
+function addLots(n){
+  const p = curPx(), tot = pos.lots + n; pos.e = Math.round((pos.e * pos.lots + p * n) / tot); pos.lots = tot;
+  marks.push({j: fi, side: 'b', p}); logEv('Tambah ' + n + ' lot di Rp ' + fmt(p) + ', rata-rata beli Rp ' + fmt(pos.e), 'good'); renderAll();
+}
+
+/* ---------- tampilan panel ---------- */
+function renderAll(){ renderScore(); renderTrade(); renderRead(); renderLog(); renderSum(); }
+function renderRead(){
+  const p = curPx(), prevC = d.c[d.c.length - 1], ch = p / prevC - 1;
+  const head = isReal() ? '<b>' + esc(REAL.hide ? 'SAHAM-?' : REAL.list[REAL.cur].name) + '</b> (riwayat nyata) · ' + esc(lblFull(Math.min(fi, bars.length - 1))) + ' · hari ke-' + (Math.min(fi, bars.length - 1) - HIST + 1) + ' dari ' + (bars.length - HIST) : '<b>' + SCEN[scn].kode + '</b> (rekaan) · Hari ' + Math.min(fi + 1, bars.length) + ' dari ' + bars.length;
+  $('#read').innerHTML = `<div><span class="px ${p >= prevC ? 'up' : 'dn'}">Rp ${fmt(p)}</span></div>
+    <small>${head}</small>
+    <small>${ch >= 0 ? '+' : '−'}${f1(Math.abs(ch) * 100, 2)}% dari kemarin</small>
+    <small>Tinggi ${fmt(F.h)} · Rendah ${fmt(F.l)} · Volume ${fmt(F.v / 100)} lot</small>`;
+}
+function renderScore(){
+  const s = I.sc[I.sc.length - 1]; if (!s) return;
+  const v = verdict(s.total), x = (s.total + 100) / 2;
+  $('#verdict').innerHTML = `<span class="pill ${v.cls}">${v.t}</span>`;
+  const zon = [[0,25,'var(--bad)'],[25,37.5,'#e8845f'],[37.5,62.5,'#c3ccd8'],[62.5,75,'#6cc48f'],[75,100,'var(--good)']];
+  if (!$('#mk')) {
+    $('#gaugeBox').innerHTML = `<div class="gauge" aria-hidden="true">${zon.map(z => `<span style="width:${z[1] - z[0]}%;background:${z[2]}"></span>`).join('')}<div class="mk" id="mk" style="left:${x}%"></div>${[-100,-50,-25,25,50,100].map(t => `<span class="tk" style="left:${(t + 100) / 2}%">${t > 0 ? '+' : ''}${t}</span>`).join('')}</div>`;
+  }
+  $('#mk').style.left = x + '%'; $('#mk').textContent = f1(s.total, 0);
+  $('#comps').innerHTML = s.comps.map(c => {
+    const pct = Math.abs(c.v) * 50, ps = c.v >= 0, pt = c.w * c.v;
+    return `<div class="comp"><span>${esc(c.name)} <span style="color:var(--muted)">×${c.w}</span></span><div class="meter"><i style="${ps ? 'left:50%' : 'right:50%'};width:${pct}%;background:${ps ? 'var(--good)' : 'var(--bad)'}"></i></div><span class="val">${pt >= 0 ? '+' : '−'}${f1(Math.abs(pt))}</span></div>`;
+  }).join('');
+}
+function renderTrade(){
+  const box = $('#trade'), c = cfgNow(); $('#modalInfo').textContent = 'Modal kini Rp ' + fmt(capNow());
+  if (ended && !pos) { box.innerHTML = '<p class="empty">Sesi selesai.</p>'; return; }
+  if (!pos) {
+    const pl = livePlan(), ok = pl && pl.lots >= 1;
+    if (!pl) { box.innerHTML = '<p class="empty">Rencana tidak bisa dihitung.</p>'; return; }
+    box.innerHTML = `<div class="row sb"><b>Rencana jika membeli sekarang</b><span class="pill ${ok ? 'good' : 'warn'}">${ok ? 'Bisa dibeli' : 'Pantau saja'}</span></div>
+      <table class="t"><tr><td>Entry</td><td><b>Rp ${fmt(pl.e)}</b></td></tr><tr><td>Stop</td><td>Rp ${fmt(pl.stop)} (risiko Rp ${fmt(pl.perLot)} per lot)</td></tr>
+      <tr><td>Target 1 / 2</td><td>Rp ${fmt(pl.t1)} / Rp ${fmt(pl.t2)}</td></tr><tr><td>Anggaran risiko</td><td>Rp ${fmt(pl.riskAmt)}</td></tr>
+      <tr><td>Lot (risiko / uang)</td><td>${pl.byRisk} / ${pl.byCash} → <b>${pl.lots} lot</b></td></tr></table>
+      <div class="row" style="margin-top:10px"><button class="btn good" id="bBuy" type="button" ${ok ? '' : 'disabled'}>Beli ${ok ? pl.lots + ' lot' : ''} (B)</button></div>
+      <p class="cap">${lastScore() >= 25 ? 'Robot memberi sinyal beli, tetapi skor tinggi bukan jaminan.' : '<b style="color:var(--amber)">Robot belum memberi sinyal beli (skor ' + f1(lastScore(), 0) + ').</b> Boleh dicoba untuk belajar, lalu lihat akibatnya.'}</p>`;
+    const b = $('#bBuy'); if (b) b.onclick = buy; return;
+  }
+  const k = posDecision(), p = curPx(), sy = k.syarat, ck = (o, t) => `<li><span class="${o ? 'ok' : 'no'}">${o ? '✓' : '✗'}</span>${t}</li>`;
+  box.innerHTML = `<div class="row sb"><b>Posisi: ${pos.lots} lot @ Rp ${fmt(pos.e)}</b><span class="pill ${k.cls}">${k.aksi}</span></div>
+    <p style="margin:6px 0;font-size:.88rem">${esc(k.alasan)}</p>
+    <table class="t"><tr><td>Harga / untung</td><td>Rp ${fmt(p)} (${k.gR >= 0 ? '+' : '−'}${f1(Math.abs(k.gR), 1)}R)</td></tr>
+     <tr><td>Stop / target</td><td>Rp ${fmt(pos.stop)} / Rp ${fmt(pos.tp)}</td></tr>
+     <tr><td>Stop baru disarankan</td><td>${k.naikStop ? '<b>Rp ' + fmt(k.stopBaru) + '</b>' : 'tetap'}</td></tr>
+     <tr><td>Untung rugi bersih</td><td><b style="color:var(--${k.bersih >= 0 ? 'good' : 'bad'})">${k.bersih >= 0 ? '+' : '−'}Rp ${fmt(Math.abs(k.bersih))}</b></td></tr></table>
+    <div class="row" style="margin-top:10px">
+      <button class="btn bad" id="bSellAll" type="button">Jual semua (J)</button>
+      ${k.lotJual && k.lotJual < pos.lots ? `<button class="btn" id="bSellPart" type="button">Jual ${k.lotJual} lot</button>` : ''}
+      ${k.naikStop ? '<button class="btn" id="bRaise" type="button">Naikkan stop</button>' : ''}
+      ${k.bolehTambah && k.tambahLot > 0 ? `<button class="btn" id="bAdd" type="button">Tambah ${k.tambahLot} lot</button>` : ''}</div>
+    <div class="sub">Boleh menambah?</div>
+    <ul class="cek">${ck(sy.untung, 'Untung ≥ 1R')}${ck(sy.tren, 'Di atas rata-rata 20 hari, skor ≥ 25')}${ck(sy.target, 'Belum dekat target')}${ck(sy.aman, 'Stop aman, tidak ada sinyal jual')}${ck(sy.dana, 'Dana masih ada')}${ck(sy.risiko, 'Total risiko di batas')}</ul>`;
+  $('#bSellAll').onclick = () => sell(pos.lots, curPx(), 'Jual semua');
+  const a = $('#bSellPart'); if (a) a.onclick = () => sell(k.lotJual, curPx(), 'Jual sebagian');
+  const r = $('#bRaise'); if (r) r.onclick = () => { pos.stop = k.stopBaru; logEv('Stop dinaikkan ke Rp ' + fmt(pos.stop), 'good'); renderTrade(); };
+  const t = $('#bAdd'); if (t) t.onclick = () => addLots(k.tambahLot);
+}
+function renderLog(){
+  $('#log').innerHTML = events.length ? events.map(e => `<li><time>${esc(e.t)}</time><span class="${e.cls || ''}">${esc(e.msg)}</span></li>`).join('') : '<li class="empty">Belum ada kejadian.</li>';
+}
+function renderSum(){
+  const c = cfgNow(), open = pos ? posDecision().bersih : 0, eq = num('pModal') + realized + open;
+  const wins = trades.filter(t => t.net > 0).length;
+  $('#sum').innerHTML = `<table class="t"><tr><td>Transaksi selesai</td><td>${trades.length} (${wins} untung)</td></tr>
+    <tr><td>Hasil bersih tercatat</td><td><b style="color:var(--${realized >= 0 ? 'good' : 'bad'})">${realized >= 0 ? '+' : '−'}Rp ${fmt(Math.abs(realized))}</b></td></tr>
+    <tr><td>Nilai modal kini</td><td>Rp ${fmt(eq)}</td></tr></table>
+    ${trades.length ? '<p class="cap">Tiga transaksi terakhir: ' + trades.slice(-3).map(t => t.lots + ' lot ' + (t.net >= 0 ? '+' : '−') + fmt(Math.abs(t.net))).join('; ') + '</p>' : '<p class="cap">Belum ada transaksi. Satu sesi hanya contoh kecil, jangan menyimpulkan dari satu sesi.</p>'}`;
+}
+
+/* ---------- grafik ---------- */
+const CV = {};
+function setup(id){
+  const c = $('#' + id), r = c.getBoundingClientRect(), dp = Math.min(window.devicePixelRatio || 1, 2);
+  const key = id; const w = Math.max(10, r.width), h = Math.max(10, r.height);
+  if (!CV[key] || CV[key].w !== w || CV[key].h !== h || CV[key].dp !== dp) { c.width = w * dp; c.height = h * dp; CV[key] = {w, h, dp, x: c.getContext('2d')}; }
+  CV[key].x.setTransform(dp, 0, 0, dp, 0, 0); return CV[key];
+}
+let COL = {};
+function readCols(){
+  const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim();
+  COL = {ink: g('--ink'), muted: g('--muted'), line: g('--line'), good: g('--good'), bad: g('--bad'), accent: g('--accent'), amber: g('--amber'), blue: g('--blue'), surface: g('--surface')};
+}
+function niceStep(raw){ const t = tick(raw * 4); const k = Math.max(t, 1), m = raw / k; const mults = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]; for (const q of mults) if (m <= q) return k * q; return k * 1000; }
+function win(){ const start = Math.max(0, fi - VIS + 1); return {start, end: fi}; }
+function bar(j){ return j < fi ? {o: d.o[j], h: d.h[j], l: d.l[j], c: d.c[j], v: d.v[j]} : F; }
+function geo(w, h){ const padL = 10, padR = 78, padT = 14, padB = 22, volH = Math.round(h * .16), pH = h - padT - padB - volH - 8; return {padL, padR, padT, padB, volH, pH, slot: (w - padL - padR) / VIS}; }
+function drawMain(now){
+  const {x, w, h} = setup('cvMain'); if (!COL.ink) readCols();
+  x.clearRect(0, 0, w, h);
+  const G = geo(w, h), {start, end} = win(), n = end - start + 1;
+  const offs = VIS - n; // geser agar candle terakhir di kanan
+  let mn = Infinity, mx = -Infinity, vmax = 1;
+  for (let j = start; j <= end; j++) { const b = bar(j); mn = Math.min(mn, b.l); mx = Math.max(mx, b.h); vmax = Math.max(vmax, j === fi ? bars[fi] ? bars[fi].v : b.v : b.v); }
+  const extra = []; 
+  if (pos) { extra.push(pos.stop, pos.tp, pos.e); }
+  const ref = curPx(); extra.forEach(p => { if (p && p > ref * .8 && p < ref * 1.3) { mn = Math.min(mn, p); mx = Math.max(mx, p); } });
+  const padp = (mx - mn) * .08 || 1; yMinT = mn - padp; yMaxT = mx + padp;
+  if (firstDraw || !halus) { yMin = yMinT; yMax = yMaxT; firstDraw = false; } else { yMin += (yMinT - yMin) * .14; yMax += (yMaxT - yMax) * .14; }
+  const Y = p => G.padT + (yMax - p) / (yMax - yMin) * G.pH, X = j => G.padL + (j - start + offs + .5) * G.slot;
+  x.font = '11px "Plus Jakarta Sans",system-ui,sans-serif'; x.textBaseline = 'middle';
+  // watermark
+  x.save(); x.translate(w / 2 - G.padR / 2, G.padT + G.pH / 2); x.rotate(-.2); x.fillStyle = COL.muted; x.globalAlpha = .08; x.font = '800 64px Sora,system-ui,sans-serif'; x.textAlign = 'center'; x.fillText(isReal() ? 'RIWAYAT' : 'SIMULASI', 0, 0); x.restore();
+  // grid
+  const step = niceStep((yMax - yMin) / 4); x.strokeStyle = COL.line; x.lineWidth = 1; x.fillStyle = COL.muted; x.textAlign = 'left';
+  for (let p = Math.ceil(yMin / step) * step; p < yMax; p += step) { const yy = Math.round(Y(p)) + .5; x.beginPath(); x.moveTo(G.padL, yy); x.lineTo(w - G.padR, yy); x.stroke(); x.fillText(fmt(p), w - G.padR + 8, yy); }
+  // x labels
+  x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  for (let j = start; j <= end; j++) if ((j + 1) % 20 === 0) { x.fillStyle = COL.muted; x.fillText(isReal() && !REAL.hide ? tglPendek(dates[j]) : 'H' + (j + 1), X(j), h - 6); }
+  x.textBaseline = 'middle';
+  // volume
+  const vy0 = h - G.padB, bw = Math.max(2, G.slot * .62);
+  for (let j = start; j <= end; j++) { const b = bar(j), vh = Math.max(1, b.v / (vmax * 1.05) * G.volH); x.globalAlpha = j === fi ? .55 : .3; x.fillStyle = b.c >= b.o ? COL.good : COL.bad; x.fillRect(X(j) - bw / 2, vy0 - vh, bw, vh); }
+  x.globalAlpha = 1;
+  // SMA
+  const line = (arr, col) => { x.strokeStyle = col; x.lineWidth = 1.6; x.beginPath(); let st = false; for (let j = start; j < end; j++) { const v = arr[j]; if (v == null) continue; const px = X(j), py = Y(v); if (!st) { x.moveTo(px, py); st = true; } else x.lineTo(px, py); } x.stroke(); };
+  line(I.sma50, COL.blue); line(I.sma20, COL.amber);
+  // garis rencana / posisi
+  const dash = (p, col, label, strong) => { if (!(p > 0)) return; const yy = Y(p); if (yy < G.padT - 2 || yy > G.padT + G.pH + 2) return; x.save(); x.setLineDash([6, 4]); x.strokeStyle = col; x.lineWidth = strong ? 1.6 : 1; x.beginPath(); x.moveTo(G.padL, yy); x.lineTo(w - G.padR, yy); x.stroke(); x.restore(); tag(x, w, G, yy, label + ' ' + fmt(p), col, '#fff'); };
+  if (pos) { dash(pos.tp, COL.good, 'Target', true); dash(pos.e, COL.ink, 'Beli', true); dash(pos.stop, COL.bad, 'Stop', true); }
+  // candle
+  for (let j = start; j <= end; j++) {
+    const b = bar(j), cx = X(j), up = b.c >= b.o, col = up ? COL.good : COL.bad;
+    x.strokeStyle = col; x.lineWidth = 1; x.beginPath(); x.moveTo(Math.round(cx) + .5, Y(b.h)); x.lineTo(Math.round(cx) + .5, Y(b.l)); x.stroke();
+    const y1 = Y(Math.max(b.o, b.c)), y2 = Y(Math.min(b.o, b.c)); x.fillStyle = col; x.fillRect(cx - bw / 2, y1, bw, Math.max(1.5, y2 - y1));
+    if (j === fi) { x.strokeStyle = COL.ink; x.lineWidth = 1.2; x.strokeRect(cx - bw / 2 - .5, y1 - .5, bw + 1, Math.max(1.5, y2 - y1) + 1); }
+  }
+  // penanda transaksi
+  marks.forEach(m => { if (m.j < start || m.j > end) return; const cx = X(m.j), b = bar(m.j); x.fillStyle = m.side === 'b' ? COL.good : COL.bad; x.beginPath();
+    if (m.side === 'b') { const yy = Y(b.l) + 12; x.moveTo(cx, yy - 8); x.lineTo(cx - 6, yy + 3); x.lineTo(cx + 6, yy + 3); } else { const yy = Y(b.h) - 12; x.moveTo(cx, yy + 8); x.lineTo(cx - 6, yy - 3); x.lineTo(cx + 6, yy - 3); }
+    x.closePath(); x.fill(); });
+  // harga kini
+  const py = Y(F.c), cx = X(fi), fl = now - tFlash < 380;
+  x.save(); x.setLineDash([2, 3]); x.strokeStyle = dirTick >= 0 ? COL.good : COL.bad; x.globalAlpha = .7; x.beginPath(); x.moveTo(G.padL, py); x.lineTo(w - G.padR, py); x.stroke(); x.restore();
+  if (halus && playing) { const ph = (now % 900) / 900; x.strokeStyle = dirTick >= 0 ? COL.good : COL.bad; x.globalAlpha = 1 - ph; x.lineWidth = 2; x.beginPath(); x.arc(cx, py, 4 + ph * 10, 0, Math.PI * 2); x.stroke(); x.globalAlpha = 1; }
+  x.fillStyle = COL.ink; x.beginPath(); x.arc(cx, py, 3.2, 0, Math.PI * 2); x.fill();
+  tag(x, w, G, py, fmt(F.c), dirTick >= 0 ? COL.good : COL.bad, '#fff', fl);
+  // legenda
+  x.textAlign = 'left'; x.font = '600 11px "Plus Jakarta Sans",system-ui,sans-serif';
+  x.fillStyle = COL.amber; x.fillRect(G.padL, 10, 14, 3); x.fillStyle = COL.muted; x.fillText('SMA20', G.padL + 19, 12);
+  x.fillStyle = COL.blue; x.fillRect(G.padL + 70, 10, 14, 3); x.fillStyle = COL.muted; x.fillText('SMA50', G.padL + 89, 12);
+  // hover
+  if (hoverJ != null && hoverJ >= start && hoverJ <= end) { const hx = Math.round(X(hoverJ)) + .5; x.strokeStyle = COL.muted; x.globalAlpha = .6; x.setLineDash([3, 3]); x.beginPath(); x.moveTo(hx, G.padT); x.lineTo(hx, h - G.padB); x.stroke(); x.setLineDash([]); x.globalAlpha = 1; }
+}
+function tag(x, w, G, yy, text, bg, fg, glow){
+  x.save(); const tw = G.padR - 4, th = 18, tx = w - G.padR + 2; x.fillStyle = bg; if (glow) { x.shadowColor = bg; x.shadowBlur = 12; }
+  x.beginPath(); if (x.roundRect) x.roundRect(tx, yy - th / 2, tw, th, 5); else x.rect(tx, yy - th / 2, tw, th); x.fill(); x.shadowBlur = 0;
+  x.fillStyle = fg; x.font = '700 11px "Plus Jakarta Sans",system-ui,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, tx + tw / 2, yy + .5); x.restore();
+}
+function drawScore(){
+  const {x, w, h} = setup('cvScore'); if (!COL.ink) readCols(); x.clearRect(0, 0, w, h);
+  const padL = 10, padR = 78, padT = 8, padB = 8, pw = w - padL - padR, ph = h - padT - padB, Y = s => padT + (100 - s) / 200 * ph;
+  const zones = [[25, 100, COL.good], [-25, 25, COL.muted], [-100, -25, COL.bad]];
+  zones.forEach(z => { x.globalAlpha = .09; x.fillStyle = z[2]; x.fillRect(padL, Y(z[1]), pw, Y(z[0]) - Y(z[1])); }); x.globalAlpha = 1;
+  x.font = '11px "Plus Jakarta Sans",system-ui,sans-serif'; x.textBaseline = 'middle'; x.textAlign = 'left'; x.fillStyle = COL.muted; x.strokeStyle = COL.line; x.lineWidth = 1;
+  [[25, '+25 beli'], [0, '0'], [-25, '−25 hindari']].forEach(l => { const yy = Math.round(Y(l[0])) + .5; x.beginPath(); x.moveTo(padL, yy); x.lineTo(padL + pw, yy); x.stroke(); x.fillText(l[1], w - padR + 8, yy); });
+  const sc = I.sc, last = sc.length - 1, from = Math.max(0, last - VIS + 2), slot = pw / VIS, offs = VIS - (last - from + 2);
+  const X = j => padL + (j - from + offs + .5) * slot;
+  x.strokeStyle = COL.accent; x.lineWidth = 2; x.beginPath(); let st = false;
+  for (let j = from; j <= last; j++) { const s = sc[j]; if (!s) continue; const px = X(j), py = Y(s.total); if (!st) { x.moveTo(px, py); st = true; } else x.lineTo(px, py); } x.stroke();
+  const s = sc[last]; if (s) { x.fillStyle = COL.accent; x.beginPath(); x.arc(X(last), Y(s.total), 4, 0, Math.PI * 2); x.fill(); x.fillStyle = COL.ink; x.font = '700 11px "Plus Jakarta Sans",system-ui,sans-serif'; x.textAlign = 'left'; x.fillText(f1(s.total, 0), X(last) + 8, Y(s.total) - 10); }
+}
+
+/* ---------- interaksi ---------- */
+function setPlayBtn(){ const b = $('#bPlay'); b.innerHTML = ended ? '&#8635; Main lagi' : playing ? '&#10074;&#10074; Jeda' : (fi === HIST && F.c === F.o && prog === 0 ? '&#9654; Mulai' : '&#9654; Lanjut'); }
+function togglePlay(){
+  if (ended) { startSession(); playing = true; setPlayBtn(); return; }
+  playing = !playing; stepOnce = false; if (playing) { $('#toast').classList.remove('on'); if (tebak) { reveal = false; applyCover(); } } setPlayBtn();
+}
+function stepDay(){ if (ended) return; playing = true; stepOnce = true; $('#toast').classList.remove('on'); if (tebak) { reveal = false; applyCover(); } setPlayBtn(); }
+function applyCover(){ const hid = tebak && !reveal; $('#scoreCard').classList.toggle('hid', hid); $('#scoreCv').classList.toggle('hid', hid); }
+function buildChips(){
+  $('#scn').innerHTML = Object.keys(SCEN).map(k => `<button class="chip" type="button" data-k="${k}" aria-pressed="${k === scn}">${SCEN[k].n}</button>`).join('');
+  $$('#scn .chip').forEach(b => b.onclick = () => { scn = b.dataset.k; $$('#scn .chip').forEach(c => c.setAttribute('aria-pressed', c === b ? 'true' : 'false')); $('#lesson').innerHTML = SCEN[scn].les; startSession(); });
+  $('#lesson').innerHTML = SCEN[scn].les;
+  const sp = [.5, 1, 2, 4, 8, 16];
+  $('#spd').innerHTML = sp.map(s => `<button class="chip" type="button" data-s="${s}" aria-pressed="${s === speed}">${s}×</button>`).join('');
+  $$('#spd .chip').forEach(b => b.onclick = () => { speed = +b.dataset.s; $$('#spd .chip').forEach(c => c.setAttribute('aria-pressed', c === b ? 'true' : 'false')); });
+}
+$('#bPlay').onclick = togglePlay; $('#bStep').onclick = stepDay; $('#bReset').onclick = () => startSession();
+$('#bAcak').onclick = () => { if (SRC.mode === 'real' && REAL.list.length) { pickEnd(); startSession(); return; } seed = 1 + Math.floor(Math.random() * 9999); $('#seed').value = seed; startSession(); };
+$('#seed').onchange = () => { const v = Math.round(num('seed')); seed = v > 0 ? v : 7; $('#seed').value = seed; startSession(); };
+$('#tJeda').onchange = e => { jeda = e.target.checked; };
+$('#tHalus').onchange = e => { halus = e.target.checked; };
+$('#tTebak').onchange = e => { tebak = e.target.checked; reveal = false; applyCover(); };
+$$('[data-reveal]').forEach(b => b.onclick = () => { reveal = true; applyCover(); });
+['pModal','pRisk','pMult'].forEach(id => { $('#' + id).oninput = () => { renderTrade(); renderSum(); }; });
+let skala = 0;
+$('#bTeks').onclick = () => { skala = (skala + 1) % 3; document.documentElement.style.setProperty('--skala', [1, 1.15, 1.3][skala]); $('#bTeks').setAttribute('aria-pressed', skala ? 'true' : 'false'); $('#bTeks').textContent = ['Teks besar', 'Teks lebih besar', 'Teks normal'][skala]; };
+$('#bTema').onclick = () => { const r = document.documentElement, g = r.dataset.theme !== 'dark'; r.dataset.theme = g ? 'dark' : 'light'; $('#bTema').setAttribute('aria-pressed', g ? 'true' : 'false'); $('#bTema').textContent = g ? 'Tema terang' : 'Tema gelap'; readCols(); };
+$('#bLayar').onclick = () => { try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} };
+document.addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName) && e.key === ' ') return;
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'ArrowRight') stepDay();
+  else if (e.key === 'r' || e.key === 'R') startSession();
+  else if (e.key === 'b' || e.key === 'B') buy();
+  else if (e.key === 'j' || e.key === 'J') { if (pos) sell(pos.lots, curPx(), 'Jual semua'); }
+  else if (e.key === 'f' || e.key === 'F') $('#bLayar').click();
+});
+const cvm = $('#cvMain'), tip = $('#tip');
+function hoverAt(ev){
+  const r = cvm.getBoundingClientRect(), G = geo(r.width, r.height), {start, end} = win(), n = end - start + 1, offs = VIS - n;
+  const j = start + Math.floor((ev.clientX - r.left - G.padL) / G.slot) - offs;
+  if (j < start || j > end) { hoverJ = null; tip.style.display = 'none'; return; }
+  hoverJ = j; const b = bar(j), s = I.sc[j], hidden = tebak && !reveal;
+  tip.innerHTML = `<b>${esc(lblFull(j))}${j === fi ? ' (berjalan)' : ''}</b><br>Buka ${fmt(b.o)} · Tutup ${fmt(b.c)}<br>Tinggi ${fmt(b.h)} · Rendah ${fmt(b.l)}<br>Volume ${fmt(b.v / 100)} lot${s && !hidden && j < fi ? '<br>Skor ' + f1(s.total, 0) + ' · ' + verdict(s.total).t : ''}`;
+  tip.style.display = 'block'; const tw = tip.offsetWidth; let lx = ev.clientX - r.left + 14; if (lx + tw > r.width) lx = ev.clientX - r.left - tw - 14; tip.style.left = lx + 'px'; tip.style.top = Math.max(4, ev.clientY - r.top - 20) + 'px';
+}
+cvm.addEventListener('pointermove', hoverAt); cvm.addEventListener('pointerleave', () => { hoverJ = null; tip.style.display = 'none'; });
+window.addEventListener('resize', () => { readCols(); });
+/* ---------- sumber data nyata ---------- */
+function sanitize(rows){
+  const out = {bars: [], dates: []};
+  rows.forEach(r => { const o = +r.o, h = +r.h, l = +r.l, c = +r.c, v = +r.v || 0; if (![o, h, l, c].every(x => isFinite(x) && x > 0)) return;
+    out.bars.push({o, h: Math.max(h, o, c), l: Math.min(l, o, c), c, v: Math.max(0, Math.round(v))}); out.dates.push(r.d); });
+  return out;
+}
+function setRealList(items, pilih){
+  const keep = REAL.list.filter(x => x.src !== items.src);
+  REAL.list = keep.concat(items.list).sort((a, b) => a.name.localeCompare(b.name));
+  const i = REAL.list.findIndex(x => x.name === pilih); REAL.cur = i >= 0 ? i : 0;
+  $('#realSel').innerHTML = REAL.list.map((x, k) => `<option value="${k}">${esc(x.name)} (${x.bars.length} hari)</option>`).join('');
+  $('#realSel').value = REAL.cur; $('#realCtl').hidden = !REAL.list.length;
+}
+function realStatus(m, bad){ const e = $('#realStat'); e.textContent = m; e.className = bad ? 'err' : 'empty'; }
+async function loadFromRobot(){
+  realStatus('Memuat data dari robot Anda...');
+  try {
+    let tok = null; try { tok = localStorage.getItem('rsm_tok'); } catch (e) {}
+    if (!tok) throw new Error('Belum masuk. Buka halaman utama (index.html), masuk, lalu buka halaman ini lagi. Atau impor CSV.');
+    let html; try { html = await (await fetch('index.html', {cache: 'no-store'})).text(); } catch (e) { throw new Error('Halaman ini harus berada satu folder dengan index.html di GitHub Pages. Atau impor CSV.'); }
+    const m = /const API_URL\s*=\s*"([^"]+)"/.exec(html);
+    if (!m || m[1].indexOf('GANTI_DENGAN') === 0) throw new Error('URL Web App di index.html belum diisi. Atau impor CSV.');
+    let res; try { res = await fetch(m[1], {method: 'POST', headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: JSON.stringify({action: 'data', token: tok})}); } catch (e) { throw new Error('Tidak bisa menghubungi server. Periksa koneksi internet.'); }
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.sesi === false ? 'Sesi berakhir. Masuk lagi di halaman utama.' : (j.error || 'Permintaan gagal.'));
+    const list = []; (j.stocks || []).forEach(x => { try { const s = sanitize(x.d.map((t, i) => ({d: t, o: x.o[i], h: x.h[i], l: x.l[i], c: x.c[i], v: x.v[i]}))); if (s.bars.length >= 100) list.push({name: x.kode, bars: s.bars, dates: s.dates, src: 'robot'}); } catch (e) {} });
+    if (!list.length) throw new Error('Belum ada saham dengan riwayat minimal 100 hari di watchlist Anda.');
+    if (j.cfg) { const set = (id, v) => { if (v != null && !isNaN(v) && v > 0) $(id).value = v; }; set('#pModal', j.cfg.cap); set('#pRisk', j.cfg.riskPct); set('#pMult', j.cfg.atrMult); }
+    setRealList({src: 'robot', list}, null); pickEnd();
+    realStatus(list.length + ' saham dimuat dari robot Anda. Modal dan risiko mengikuti Pengaturan Anda.'); startSession();
+  } catch (e) { realStatus(e.message, true); }
+}
+function splitLine(l){ const sep = l.indexOf('\t') >= 0 ? '\t' : l.split(';').length > l.split(',').length ? ';' : ','; return l.split(sep).map(x => x.trim().replace(/^"|"$/g, '')); }
+function numId(x){ x = String(x).replace(/\s/g, '').replace(/[^0-9.,-]/g, ''); if (x.indexOf(',') >= 0 && x.indexOf('.') >= 0) x = x.lastIndexOf(',') > x.lastIndexOf('.') ? x.replace(/\./g, '').replace(',', '.') : x.replace(/,/g, ''); else if (x.indexOf(',') >= 0) x = /,\d{1,2}$/.test(x) ? x.replace(',', '.') : x.replace(/,/g, ''); else if ((x.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(x)) x = x.replace(/\./g, ''); return parseFloat(x); }
+function parseDate(s){ s = String(s).trim(); let m = /^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/.exec(s); if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2); m = /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/.exec(s); if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); return null; }
+function importCSV(text, name){
+  const lines = text.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean); if (lines.length < 5) throw new Error('Data terlalu sedikit.');
+  let idx = {d: 0, o: 1, h: 2, l: 3, c: 4, v: 5}, first = splitLine(lines[0]), start = 0;
+  if (!parseDate(first[0])) { start = 1; const nm = first.map(x => x.toLowerCase()), f = (...ks) => nm.findIndex(x => ks.some(k => x === k || x.indexOf(k) === 0));
+    const t = {d: f('date', 'tanggal'), o: f('open', 'buka'), h: f('high', 'tinggi'), l: f('low', 'rendah'), c: f('close', 'tutup', 'penutupan'), v: f('volume', 'vol')};
+    if (Object.values(t).every(k => k >= 0)) idx = t; }
+  const rows = []; for (let i = start; i < lines.length; i++) { const p = splitLine(lines[i]), dd = parseDate(p[idx.d]); if (!dd) continue; rows.push({d: dd, o: numId(p[idx.o]), h: numId(p[idx.h]), l: numId(p[idx.l]), c: numId(p[idx.c]), v: numId(p[idx.v])}); }
+  rows.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
+  const s = sanitize(rows); if (s.bars.length < 100) throw new Error('Butuh minimal 100 hari data yang valid (ada ' + s.bars.length + ').');
+  const nm = (name || 'CSV').toUpperCase().replace(/\.[A-Z]+$/, '').slice(0, 14) || 'CSV';
+  setRealList({src: 'csv:' + nm, list: [{name: nm, bars: s.bars, dates: s.dates, src: 'csv:' + nm}]}, nm); pickEnd();
+  realStatus('Data ' + nm + ' dimuat (' + s.bars.length + ' hari).'); SRC.mode = 'real'; applyMode(); startSession();
+}
+function applyMode(){
+  const real = SRC.mode === 'real';
+  $$('#src .chip').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === SRC.mode ? 'true' : 'false'));
+  $('#scnRow').hidden = real; $('#seedBox').hidden = real; $('#realBox').hidden = !real;
+  $('#ribbon').textContent = real ? 'DATA NYATA · PUTAR ULANG RIWAYAT' : 'SIMULASI · DATA REKAAN';
+  $('#lesson').innerHTML = real ? '<b>Pelajaran:</b> ini riwayat harga nyata yang diputar ulang. Tebak dulu, baru lihat apa yang terjadi. Satu contoh bukan bukti sistem untung.' : SCEN[scn].les;
+  $('#capChart').textContent = real ? 'Hijau = harga naik pada hari itu, merah = turun. Garis kuning SMA20, biru SMA50. Harga buka, tinggi, rendah, dan tutup tiap hari adalah data nyata; gerakan di dalam satu hari hanya animasi.' : 'Hijau = harga naik pada hari itu, merah = turun. Garis kuning SMA20, biru SMA50. Semua harga di sini rekaan komputer, bukan harga pasar.';
+  $('#disc').textContent = real ? 'Ini putar ulang riwayat harga nyata untuk belajar, bukan harga langsung. Masa lalu tidak menjamin masa depan. Bukan saran investasi. Bila Anda memegang saham yang dibahas, sebutkan saat menjelaskan.' : 'Ruang latihan ini memakai harga rekaan komputer untuk belajar membaca skor, risiko, dan keputusan posisi. Bukan harga pasar, bukan saran investasi. Hasil di sini tidak memprediksi hasil di pasar nyata.';
+}
+$$('#src .chip').forEach(b => b.onclick = () => { SRC.mode = b.dataset.m; applyMode(); if (SRC.mode === 'real' && !REAL.list.length) { realStatus('Pilih sumber data nyata di bawah.'); try { if (localStorage.getItem('rsm_tok')) { loadFromRobot(); return; } } catch (e) {} } startSession(); });
+$('#bLoad').onclick = loadFromRobot;
+$('#csvFile').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { try { importCSV(String(r.result), f.name); } catch (er) { realStatus(er.message, true); } }; r.readAsText(f); e.target.value = ''; };
+$('#bPaste').onclick = () => { $('#pasteBox').hidden = !$('#pasteBox').hidden; };
+$('#bCsvOk').onclick = () => { try { importCSV($('#csvText').value, $('#csvName').value || 'CSV'); $('#pasteBox').hidden = true; } catch (er) { realStatus(er.message, true); } };
+$('#realSel').onchange = e => { REAL.cur = +e.target.value; pickEnd(); startSession(); };
+$('#tAcak').onchange = e => { REAL.rand = e.target.checked; pickEnd(); startSession(); };
+$('#tHide').onchange = e => { REAL.hide = e.target.checked; renderAll(); };
+$('#realDays').innerHTML = [40, 60, 90, 120].map(n => `<button class="chip" type="button" data-n="${n}" aria-pressed="${n === REAL.days}">${n} hari</button>`).join('');
+$$('#realDays .chip').forEach(b => b.onclick = () => { REAL.days = +b.dataset.n; $$('#realDays .chip').forEach(c => c.setAttribute('aria-pressed', c === b ? 'true' : 'false')); pickEnd(); startSession(); });
+readCols(); buildChips(); startSession(); applyCover();
+applyMode();
+requestAnimationFrame(frame);
+window.__sim = {importCSV, REAL, get dates(){ return dates; }, get state(){ return {fi, playing, ended, pos, realized, trades: trades.length, score: lastScore()}; }, setSpeed(s){ speed = s; }};
+</script>
+</body>
+</html>
