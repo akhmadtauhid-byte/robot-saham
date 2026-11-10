@@ -2289,7 +2289,19 @@ function renderKB(){
 }
 (function(){
   const b = document.getElementById('kbMuat'), c = document.getElementById('kbTerj');
-  if (b) b.onclick = () => muatPasar();
+  if (b) b.onclick = async () => {
+    // umpan balik pindai: tampilkan status + bawa layar ke hasil (tabel di atas tombol)
+    const m = document.getElementById('kbSegarMsg'), card = document.getElementById('kbCard');
+    if (PASAR.busy) return;
+    const label = b.textContent; b.textContent = 'Memindai…';
+    if (m) m.textContent = 'Memindai ulang data pasar…';
+    await muatPasar();
+    b.textContent = label;
+    const jam = new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta'});
+    if (m) m.textContent = PASAR.err ? 'Pindai gagal: ' + PASAR.err
+      : 'Pindai selesai pukul ' + jam + ' WIB: ' + PASAR.st.length + ' saham dipindai' + (PASAR.updated ? ', data pasar terakhir diperbarui ' + fmtUpd(PASAR.updated) + ' WIB' : '') + '. Hasilnya ada di tabel kandidat & peringkat di atas. Bila datanya belum berubah, tekan "Perbarui data pasar".';
+    if (card) window.scrollTo({top: card.offsetTop - 10, behavior: 'smooth'});
+  };
   if (c) c.onchange = () => { KB.terjangkau = c.checked; renderKB(); };
   const pz = document.getElementById('kbPasar');
   if (pz) pz.onchange = () => { KB.pasar = pz.checked; renderKB(); };
