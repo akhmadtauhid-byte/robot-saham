@@ -634,6 +634,24 @@ function backtest(d, I, cfg){
     pf: gl > 0 ? gw / gl : (gw > 0 ? Infinity : null), expo: inBars / eq.length, start};
 }
 let pos_atr = 0;
+/* penanda kualitas backtest per saham (pedoman umum, bukan jaminan). Sampel per saham kecil, jadi "lolos" tidak berarti aman. */
+function kualitasBT(bt){
+  if (!bt || !bt.n) return {lvl: 'ragu', t: 'backtest ragu', why: 'belum ada trade selesai pada riwayat saham ini'};
+  const f1 = x => (x * 100).toFixed(1).replace('.', ',') + '%', pf = bt.pf, why = [];
+  if (bt.total < 0) why.push('return strategi negatif (' + f1(bt.total) + ')');
+  if (pf != null && pf < 1) why.push('profit factor ' + pf.toFixed(2).replace('.', ',') + ' (di bawah 1)');
+  if (bt.total >= 0 && bt.total < bt.bh) why.push('lebih buruk dari beli-dan-tahan (' + f1(bt.bh) + ')');
+  if (bt.n < 10) why.push('hanya ' + bt.n + ' trade, mudah kebetulan');
+  if (bt.mdd < -0.2) why.push('penurunan terdalam ' + f1(bt.mdd));
+  if (pf != null && pf >= 1 && pf < 1.3) why.push('profit factor ' + pf.toFixed(2).replace('.', ',') + ' (di bawah 1,3)');
+  if (bt.total < 0 || (pf != null && pf < 1)) return {lvl: 'lemah', t: 'backtest lemah', why: why.join('; ')};
+  if (why.length) return {lvl: 'ragu', t: 'backtest ragu', why: why.join('; ')};
+  return {lvl: 'cukup', t: 'backtest lolos', why: 'lolos pedoman awal (untung, mengalahkan beli-dan-tahan, profit factor ≥ 1,3, ≥ 10 trade); tetap bukan jaminan'};
+}
+function badgeBT(q, tampilAlasan){
+  const cls = q.lvl === 'lemah' ? 'bad' : q.lvl === 'ragu' ? 'warn' : 'good', ic = q.lvl === 'lemah' ? '⚠' : q.lvl === 'ragu' ? '?' : '✓';
+  return `<span class="badge ${cls}" title="${esc(q.why)}"><i>${ic}</i>${q.t}</span>` + (tampilAlasan ? `<br><span class="note">${esc(q.why)}</span>` : '');
+}
 
 /* ===================== data contoh ===================== */
 function rng(seed){ return () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296; }
@@ -1273,7 +1291,7 @@ function renderWatch(){
       <td>${meterHTML(sc.total)}</td>
       <td class="num">${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</td>
       <td class="num">${deltaSkorHTML(pb.dS)}</td>
-      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span>${pb.bounce ? ' <span class="badge warn" title="Harga memantul naik tetapi masih di bawah SMA50 dan skor negatif"><i>↻</i>pantulan</span>' : ''}</td>
+      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span>${pb.bounce ? ' <span class="badge warn" title="Harga memantul naik tetapi masih di bawah SMA50 dan skor negatif"><i>↻</i>pantulan</span>' : ''}${v.cls === 'good' ? ' ' + badgeBT(kualitasBT(bt)) : ''}</td>
       <td class="num">${st.I.rsi[n] != null ? st.I.rsi[n].toFixed(0) : '–'}</td>
       <td class="num ${bt.total >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.total)}</td>
       <td class="num ${bt.bh >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.bh)}</td>
@@ -1315,6 +1333,7 @@ function renderDetail(){
   if (n < 120) warns.push('Data pendek, hasil backtest kurang bermakna.');
   if (lastDate && !st.name.startsWith('DEMO') && (Date.now() - lastDate.getTime()) / 864e5 > 7) warns.push('Data terakhir bertanggal ' + fmtD(lastDate) + ' (lebih dari 7 hari lalu); perbarui sebelum mengambil keputusan.');
   if (st.name.startsWith('DEMO')) warns.push('Ini data sintetis untuk mencoba alat, bukan harga pasar sebenarnya.');
+  if (v.cls === 'good') { const q = kualitasBT(bt); if (q.lvl !== 'cukup') warns.push('Sinyal beli, tetapi ' + q.t + ': ' + q.why + '. Perlakukan sinyal ini sebagai bahan pertimbangan, bukan alasan untuk membeli.'); }
 
   const compRows = sc.comps.map(c => `<tr><td>${esc(c.name)}</td><td class="num">${c.w}</td><td>${meterHTML(c.v * 100)}</td><td class="num ${c.v >= 0 ? 'pos' : 'neg'}">${c.v >= 0 ? '+' : ''}${(c.v * c.w).toFixed(1).replace('.', ',')}</td><td class="why">${esc(c.why)}</td></tr>`).join('');
   const buyOK = sc.total >= cfg.entryTh;
@@ -2221,7 +2240,7 @@ function barisKB(r){
   return `<tr><td><b>${esc(k)}</b>${ada ? '<br><span class="note">di watchlist</span>' : ''}</td><td class="num">${fmtP(pe.price)}</td>
     <td><span class="badge ${r.v.cls}"><i>${r.v.ic}</i>${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</span></td><td class="num">${pe.pt}</td><td class="num">${pe.rs.toFixed(0)}</td>
     <td class="num">Masuk ~${fmtP(pl.e)}<br><span class="neg">Stop ${fmtP(pl.stop)} (${fmtPct(pl.stop / pl.e - 1, 1)})</span><br><span class="pos">Target ${fmtP(pl.t1)} (${fmtPct(pl.t1 / pl.e - 1, 1)})</span></td>
-    <td>${lot}</td><td class="why">${cat}</td>
+    <td>${lot}</td><td class="why">${cat}${r.v.cls === 'good' ? '<br>' + badgeBT(kualitasBT(backtest(st.d, st.I, S.cfg)), true) : ''}</td>
     <td><button type="button" data-kb="${esc(k)}" data-ada="${ada ? 1 : 0}">${ada ? 'Buka' : 'Tambah'}</button></td></tr>`;
 }
 function barisRank(r, i){
@@ -2236,7 +2255,7 @@ function barisRank(r, i){
     <td class="num ${pe.chg1 >= 0 ? 'pos' : 'neg'}">${fmtPct(pe.chg1, 1)}</td><td class="num ${r.ret20 == null ? '' : r.ret20 >= 0 ? 'pos' : 'neg'}">${r.ret20 == null ? '–' : fmtPct(Math.abs(r.ret20) < 0.005 ? 0 : r.ret20, 0)}</td>
     <td><span class="badge ${c}">${r.pot} · ${t}</span></td>
     <td><span class="badge ${r.v.cls}"><i>${r.v.ic}</i>${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</span></td>
-    <td>${stat}</td><td class="why">${al}</td>
+    <td>${stat}</td><td class="why">${al}${r.v.cls === 'good' ? '<br>' + badgeBT(kualitasBT(backtest(st.d, st.I, S.cfg)), true) : ''}</td>
     <td><button type="button" data-kb="${esc(k)}" data-ada="${ada ? 1 : 0}">${ada ? 'Buka' : 'Tambah'}</button></td></tr>`;
 }
 function renderKB(){
@@ -2289,19 +2308,7 @@ function renderKB(){
 }
 (function(){
   const b = document.getElementById('kbMuat'), c = document.getElementById('kbTerj');
-  if (b) b.onclick = async () => {
-    // umpan balik pindai: tampilkan status + bawa layar ke hasil (tabel di atas tombol)
-    const m = document.getElementById('kbSegarMsg'), card = document.getElementById('kbCard');
-    if (PASAR.busy) return;
-    const label = b.textContent; b.textContent = 'Memindai…';
-    if (m) m.textContent = 'Memindai ulang data pasar…';
-    await muatPasar();
-    b.textContent = label;
-    const jam = new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta'});
-    if (m) m.textContent = PASAR.err ? 'Pindai gagal: ' + PASAR.err
-      : 'Pindai selesai pukul ' + jam + ' WIB: ' + PASAR.st.length + ' saham dipindai' + (PASAR.updated ? ', data pasar terakhir diperbarui ' + fmtUpd(PASAR.updated) + ' WIB' : '') + '. Hasilnya ada di tabel kandidat & peringkat di atas. Bila datanya belum berubah, tekan "Perbarui data pasar".';
-    if (card) window.scrollTo({top: card.offsetTop - 10, behavior: 'smooth'});
-  };
+  if (b) b.onclick = () => muatPasar();
   if (c) c.onchange = () => { KB.terjangkau = c.checked; renderKB(); };
   const pz = document.getElementById('kbPasar');
   if (pz) pz.onchange = () => { KB.pasar = pz.checked; renderKB(); };
