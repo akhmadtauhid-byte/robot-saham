@@ -153,6 +153,7 @@ tr.sel{background:var(--bg)}
 .legend i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
 .chartwrap{position:relative;touch-action:pan-y}
 .chartwrap canvas{display:block}
+#cvO{position:absolute;left:0;top:0;pointer-events:none}
 .vline{position:absolute;top:0;bottom:0;width:1px;background:var(--muted);pointer-events:none;display:none}
 .tip{position:absolute;top:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px;pointer-events:none;display:none;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,.12);z-index:3}
 .warnlist{margin:8px 0 0;padding-left:18px;font-size:13px}
@@ -1449,12 +1450,13 @@ function renderDetail(){
         ${S.s200 ? '<span><i style="background:var(--s4)"></i>SMA200</span>' : ''}
         ${S.bb ? '<span><i style="background:var(--muted);opacity:.5"></i>Bollinger (20,2)</span>' : ''}
         ${S.ct === 'candle' ? '<span><i style="background:var(--good)"></i>naik</span><span><i style="background:var(--bad)"></i>turun</span>' : '<span><i style="background:var(--s1)"></i>Harga penutupan</span>'}
-        <span><b style="color:var(--good)">▲</b> beli (backtest)</span>
-        <span><b style="color:var(--bad)">▼</b> keluar (backtest)</span>
+        <span><b style="color:var(--good)">▲ BELI</b> = titik beli robot pada riwayat (backtest)</span>
+        <span><b style="color:var(--bad)">▼ JUAL</b> = titik keluar + hasilnya (%)</span>
+        <span><b>Titik berdenyut</b> = harga terkini; garis hijau/merah di kanan = pergerakan hari ini (harga nyata, bukan tebakan)</span>
         <span id="lglive"></span>
       </div>
       <div class="chartwrap" id="cw">
-        <canvas id="cvP"></canvas><canvas id="cvR"></canvas><canvas id="cvM"></canvas><canvas id="cvS"></canvas>
+        <canvas id="cvP"></canvas><canvas id="cvO"></canvas><canvas id="cvR"></canvas><canvas id="cvM"></canvas><canvas id="cvS"></canvas>
         <div class="vline" id="vl"></div><div class="tip" id="tip"></div>
       </div>
     </div>
@@ -1643,10 +1645,12 @@ function keputusanPosisi(st, pos, price, cfg){
     stop: lv.stop, stopBaru, naikStop, impas, lotJual, sisaLot: lots - lotJual, nettoJual: lotJual ? bersih(price, lotJual) : 0, hasilJual: lotJual ? price * lotJual * 100 * (1 - fs) : 0,
     tambahLot, bolehTambah, byCash, byRisk, biayaTambah: tambahLot * 100 * price * (1 + fb), tulis, cek};
 }
+const ANIM = {k: null, from: 0, to: 0, cur: 0, t0: 0, dur: 900, prog: 1, raf: 0}, LASTP = {k: null, p: 0};
+function pDisp(k, real){ return ANIM.k === k && ANIM.prog < 1 && ANIM.cur > 0 ? ANIM.cur : real; }
 function levelsFor(st){
   const k = st.name, L = LIVE.data[k], o = S.stocks[k];
   const list = [];
-  if (L) list.push({y: L.price, t: 'Harga', col: 'blue', solid: true});
+  if (L) list.push({y: pDisp(k, L.price), t: 'Harga', col: 'blue', solid: true, harga: true});
   const pos = posGet(k);
   if (o && posValid(pos)) {
     const lv = posLevels(o, pos);
@@ -1662,7 +1666,7 @@ function liveView(st){
   const today = (L.time || '').slice(0, 10) || wibNow().toISOString().slice(0, 10);
   const lastKey = d.date[n] ? d.date[n].toISOString().slice(0, 10) : '';
   const nd = {date: d.date.slice(), o: d.o.slice(), h: d.h.slice(), l: d.l.slice(), c: d.c.slice(), v: d.v.slice()};
-  const p = L.price;
+  const p = pDisp(st.name, L.price);
   if (lastKey === today) {
     nd.c[n] = p; nd.h[n] = Math.max(nd.h[n], L.high || p, p); nd.l[n] = Math.min(nd.l[n], L.low || p, p);
     if (L.vol) nd.v[n] = Math.max(nd.v[n], L.vol);
@@ -2494,7 +2498,71 @@ function renderMon(){
 }
 function redrawLive(){
   const st = S.stocks[S.sel]; if (!st || !LAST_BT) return;
+  const L = LIVE.data[S.sel];
+  if (L && L.price > 0 && !GERAK.kurang && LASTP.k === S.sel && LASTP.p > 0 && Math.abs(L.price - LASTP.p) > 1e-9) {
+    ANIM.k = S.sel; ANIM.from = LASTP.p; ANIM.to = L.price; ANIM.t0 = performance.now(); ANIM.prog = 0; ANIM.cur = LASTP.p;
+    if (!ANIM.raf) ANIM.raf = requestAnimationFrame(animLangkah);
+    return;
+  }
+  ANIM.prog = 1;
   drawCharts(liveView(st) || st, LAST_BT);
+}
+function animLangkah(ts){
+  ANIM.raf = 0;
+  const st = S.stocks[S.sel]; if (!st || !LAST_BT || ANIM.k !== S.sel) { ANIM.prog = 1; return; }
+  const q = Math.min(1, (ts - ANIM.t0) / ANIM.dur), e = 1 - Math.pow(1 - q, 3);
+  ANIM.prog = q; ANIM.cur = ANIM.from + (ANIM.to - ANIM.from) * e;
+  drawCharts(liveView(st) || st, LAST_BT);
+  if (q < 1) ANIM.raf = requestAnimationFrame(animLangkah);
+}
+const OV = {raf: 0, last: 0};
+function ovSiapkan(geo){
+  const cv = $('#cvO'), cp = $('#cvP'); if (!cv || !cp) return;
+  const dpr = window.devicePixelRatio || 1, w = parseFloat(cp.style.width) || 600, h = parseFloat(cp.style.height) || 320;
+  cv.style.width = w + 'px'; cv.style.height = h + 'px'; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  ovGambar(performance.now());
+  if (!OV.raf && LAST && LAST.st.live && !GERAK.kurang && pasarBuka()) OV.raf = requestAnimationFrame(ovLoop);
+}
+function ovLoop(ts){
+  OV.raf = 0;
+  const cv = $('#cvO'); if (!cv || !document.body.contains(cv) || !LAST || !LAST.st.live || GERAK.kurang || !pasarBuka()) return;
+  if (!document.hidden && ts - OV.last > 33) { OV.last = ts; ovGambar(ts); }
+  OV.raf = requestAnimationFrame(ovLoop);
+}
+function ovGambar(ts){
+  const cv = $('#cvO'); if (!cv || !LAST || !LAST.geo) return;
+  const dpr = window.devicePixelRatio || 1, ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const st = LAST.st; if (!st.live) return;
+  const {X, Y, w, h, T, B} = LAST.geo, n = st.d.c.length - 1, k = st.name;
+  const col = css('--good'), bad = css('--bad'), surf = css('--surface');
+  const cur = st.d.c[n], a = (TICKS[k] || []).slice(), zw = LAST.ZW;
+  let px = X(n), py = Y(cur), arahWarna = col;
+  const prevC = n > 0 ? st.d.c[n - 1] : cur;
+  arahWarna = cur >= prevC ? col : bad;
+  if (zw > 0 && a.length >= 2) {
+    const zx0 = w - LAST.R + 10, t0 = Date.parse(tickHari() + 'T09:00:00+07:00'), t1 = Date.parse(tickHari() + 'T16:05:00+07:00');
+    const XX = t => zx0 + Math.max(0, Math.min(1, (t - t0) / (t1 - t0))) * zw;
+    const lo = T, hi = h - B, YY = v => Math.max(lo, Math.min(hi, Y(v)));
+    ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.9; ctx.fillText('hari ini', zx0, T + 4); ctx.globalAlpha = 1;
+    ctx.strokeStyle = css('--grid'); ctx.lineWidth = 1; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(zx0 - 4, T + 12); ctx.lineTo(zx0 - 4, h - B); ctx.stroke(); ctx.setLineDash([]);
+    ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const pts = a.map(q => ({x: XX(q.t), y: YY(q.p)}));
+    const lastTick = a[a.length - 1];
+    if (ANIM.k === k && ANIM.prog < 1) pts[pts.length - 1].y = YY(ANIM.cur);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.strokeStyle = a[i].p >= a[i - 1].p ? col : bad;
+      ctx.beginPath(); ctx.moveTo(pts[i - 1].x, pts[i - 1].y); ctx.lineTo(pts[i].x, pts[i].y); ctx.stroke();
+    }
+    px = pts[pts.length - 1].x; py = pts[pts.length - 1].y; arahWarna = lastTick.p >= (a[a.length - 2].p) ? col : bad;
+  } else if (zw > 0) {
+    ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('jejak hari ini', w - LAST.R + 10, T + 4);
+  }
+  const ph = ((ts || 0) % 1600) / 1600;
+  if (!GERAK.kurang && pasarBuka()) { ctx.globalAlpha = 0.5 * (1 - ph); ctx.fillStyle = arahWarna; ctx.beginPath(); ctx.arc(px, py, 5 + ph * 11, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+  ctx.fillStyle = arahWarna; ctx.strokeStyle = surf; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, 4.5, 0, 7); ctx.fill(); ctx.stroke();
 }
 async function ambilLive(manual){
   const daftar = kodePantau();
@@ -2555,7 +2623,7 @@ function panel(cv, h, o){
   cv.style.width = w + 'px'; cv.style.height = h + 'px';
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const L = 54, R = 10, T = 18, B = 4, cnt = o.b - o.a + 1;
+  const L = 54, R = o.R || 10, T = 18, B = 4, cnt = o.b - o.a + 1;
   const X = i => L + (i - o.a + 0.5) / cnt * (w - L - R);
   const Y = v => T + (o.max - v) / ((o.max - o.min) || 1) * (h - T - B);
   ctx.font = '11px system-ui,sans-serif'; ctx.textBaseline = 'middle';
@@ -2568,7 +2636,7 @@ function panel(cv, h, o){
   }
   ctx.textAlign = 'left'; ctx.fillStyle = css('--ink2'); ctx.fillText(o.title, L, 8);
   o.draw(ctx, X, Y, w, h, T, B);
-  return {X, L, R, w, cnt};
+  return {X, Y, L, R, w, h, T, B, cnt};
 }
 function line(ctx, arr, X, Y, a, b, col, lw = 1.6, dash){
   ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.setLineDash(dash || []); ctx.beginPath();
@@ -2580,18 +2648,28 @@ function line(ctx, arr, X, Y, a, b, col, lw = 1.6, dash){
   }
   ctx.stroke(); ctx.setLineDash([]);
 }
-function tri(ctx, x, y, up, col){
-  ctx.fillStyle = col; ctx.strokeStyle = css('--surface'); ctx.lineWidth = 2;
+function tri(ctx, x, y, up, col, z){
+  z = z || 6;
+  ctx.fillStyle = col; ctx.strokeStyle = css('--surface'); ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
   ctx.beginPath();
-  if (up) { ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y + 5); ctx.lineTo(x - 6, y + 5); }
-  else { ctx.moveTo(x, y + 6); ctx.lineTo(x + 6, y - 5); ctx.lineTo(x - 6, y - 5); }
+  if (up) { ctx.moveTo(x, y - z); ctx.lineTo(x + z, y + z * 0.85); ctx.lineTo(x - z, y + z * 0.85); }
+  else { ctx.moveTo(x, y + z); ctx.lineTo(x + z, y - z * 0.85); ctx.lineTo(x - z, y - z * 0.85); }
   ctx.closePath(); ctx.stroke(); ctx.fill();
+}
+function penanda(ctx, txt, x, y, col){
+  ctx.font = 'bold 10px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(txt).width + 8, x0 = Math.max(56, x - tw / 2);
+  ctx.fillStyle = col; ctx.fillRect(x0, y - 8, tw, 16);
+  ctx.fillStyle = '#fff'; ctx.fillText(txt, x0 + tw / 2, y); ctx.textAlign = 'left'; ctx.font = '11px system-ui,sans-serif';
 }
 let LAST = null;
 function drawCharts(st, bt){
   const {d, I} = st, n = d.c.length;
   const b = n - 1, a = S.range ? Math.max(0, n - S.range) : 0;
-  LAST = {st, a, b};
+  const cwEl = $('#cw'), wTot = (cwEl && cwEl.clientWidth) || 600;
+  const ZW = st.live && wTot >= 520 ? 64 : 0, RR = st.live ? 100 + ZW : 10;
+  LAST = {st, a, b, R: RR, ZW};
+  LASTP.k = st.name; LASTP.p = d.c[n - 1];
   const rangeOf = (arrs) => { let lo = Infinity, hi = -Infinity; for (const arr of arrs) for (let i = a; i <= b; i++) if (arr[i] != null) { lo = Math.min(lo, arr[i]); hi = Math.max(hi, arr[i]); } return [lo, hi]; };
   const Lv = S.stocks[st.name] ? levelsFor(st) : null;
   let [lo, hi] = rangeOf(S.bb ? [d.l, d.h, I.bb.l, I.bb.u] : [d.l, d.h]);
@@ -2600,9 +2678,9 @@ function drawCharts(st, bt){
   let maxV = 0; for (let i = a; i <= b; i++) maxV = Math.max(maxV, d.v[i]);
   const cfgC = {s1: css('--s1'), s2: css('--s2'), s3: css('--s3'), s4: css('--s4'), good: css('--good'), bad: css('--bad'), muted: css('--muted'), ink2: css('--ink2')};
 
-  const geo = panel($('#cvP'), 320, {a, b, min: lo, max: hi, title: 'Harga (Rp)', fmt: v => fmtP(v),
+  const geo = panel($('#cvP'), 320, {a, b, R: RR, min: lo, max: hi, title: 'Harga (Rp)', fmt: v => fmtP(v),
     draw(ctx, X, Y, w, h, T, B){
-      const cnt = b - a + 1, bw = Math.max(1, (w - 64) / cnt * 0.6);
+      const cnt = b - a + 1, bw = Math.max(1, (w - 54 - RR) / cnt * 0.6);
       if (S.bb) {
         ctx.fillStyle = cfgC.muted; ctx.globalAlpha = 0.14; ctx.beginPath(); let started = false;
         for (let i = a; i <= b; i++) if (I.bb.u[i] != null) { const x = X(i), y = Y(I.bb.u[i]); if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y); }
@@ -2616,7 +2694,7 @@ function drawCharts(st, bt){
       ctx.globalAlpha = 1;
       if (S.s200) line(ctx, I.sma200, X, Y, a, b, cfgC.s4, 1.5);
       if (S.ct === 'candle') {
-        const cw2 = Math.max(1, (w - 64) / cnt * 0.72);
+        const cw2 = Math.max(1, (w - 54 - RR) / cnt * 0.72);
         for (let i = a; i <= b; i++) {
           const up = d.c[i] >= d.o[i], col = up ? cfgC.good : cfgC.bad, x = X(i);
           ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
@@ -2628,30 +2706,60 @@ function drawCharts(st, bt){
       line(ctx, I.sma50, X, Y, a, b, cfgC.s3, 1.6);
       line(ctx, I.sma20, X, Y, a, b, cfgC.s2, 1.6);
       if (S.ct !== 'candle') line(ctx, d.c, X, Y, a, b, cfgC.s1, 2);
+      let lbB = -99, lbJ = -99;
+      const step = (w - 54 - RR) / cnt;
       for (const t of bt.trades.concat(bt.open ? [{iIn: bt.open.iIn, iOut: -1}] : [])) {
-        if (t.iIn >= a && t.iIn <= b) tri(ctx, X(t.iIn), Y(d.l[t.iIn]) + 12, true, cfgC.good);
-        if (t.iOut >= a && t.iOut <= b) tri(ctx, X(t.iOut), Y(d.h[t.iOut]) - 12, false, cfgC.bad);
+        if (t.iIn >= a && t.iIn <= b) {
+          const x = X(t.iIn), y = Y(d.l[t.iIn]) + 14;
+          if (t.iOut >= a && t.iOut <= b) { ctx.strokeStyle = t.ret >= 0 ? cfgC.good : cfgC.bad; ctx.globalAlpha = 0.45; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, Y(d.c[t.iIn])); ctx.lineTo(X(t.iOut), Y(d.c[t.iOut])); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; }
+          tri(ctx, x, y, true, cfgC.good, 8);
+          if (x - lbB > 34 || step > 9) { penanda(ctx, 'BELI', x, y + 15, cfgC.good); lbB = x; }
+        }
+        if (t.iOut >= a && t.iOut <= b) {
+          const x = X(t.iOut), y = Y(d.h[t.iOut]) - 14;
+          tri(ctx, x, y, false, cfgC.bad, 8);
+          if (x - lbJ > 56 || step > 14) { penanda(ctx, 'JUAL ' + (t.ret >= 0 ? '+' : '') + (t.ret * 100).toFixed(1).replace('.', ',') + '%', x, y - 15, t.ret >= 0 ? cfgC.good : cfgC.bad); lbJ = x; }
+        }
       }
-      if (Lv) for (const v of Lv.list) {
-        if (!(v.y >= lo && v.y <= hi)) continue;
-        const y = Math.round(Y(v.y)) + 0.5, col = v.col === 'good' ? cfgC.good : v.col === 'bad' ? cfgC.bad : cfgC.s1;
-        ctx.strokeStyle = col; ctx.lineWidth = v.solid ? 1.2 : 1; ctx.setLineDash(v.solid ? [] : [5, 4]);
-        ctx.beginPath(); ctx.moveTo(geoL(), y); ctx.lineTo(w - 10, y); ctx.stroke(); ctx.setLineDash([]);
-        const txt = v.t + ' ' + fmtP(v.y); ctx.font = '11px system-ui,sans-serif'; const tw = ctx.measureText(txt).width + 8;
-        ctx.fillStyle = col; ctx.fillRect(w - 10 - tw, y - 8, tw, 16);
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, w - 10 - tw + 4, y);
+      if (Lv) {
+        const items = [];
+        for (const v of Lv.list) {
+          if (!(v.y >= lo && v.y <= hi)) continue;
+          const y = Math.round(Y(v.y)) + 0.5, col = v.col === 'good' ? cfgC.good : v.col === 'bad' ? cfgC.bad : cfgC.s1;
+          ctx.strokeStyle = col; ctx.lineWidth = v.solid ? 1.2 : 1; ctx.setLineDash(v.solid ? [] : [5, 4]);
+          ctx.beginPath(); ctx.moveTo(geoL(), y); ctx.lineTo(w - 10, y); ctx.stroke(); ctx.setLineDash([]);
+          let t = v.t;
+          if (v.harga) { const r = tickArah(st.name); const L0 = LIVE.data[st.name]; const up = r ? r.arah > 0 : (L0 && L0.prev ? v.y >= L0.prev : null); if (up != null) t = (up ? '▲ ' : '▼ ') + t; }
+          items.push({y0: y, y, col, txt: t + ' ' + fmtP(v.y), harga: v.harga});
+        }
+        items.sort((p, q) => p.y0 - q.y0);
+        for (let i = 1; i < items.length; i++) if (items[i].y - items[i - 1].y < 18) items[i].y = items[i - 1].y + 18;
+        const maxY = h - B - 9;
+        for (let i = items.length - 1; i >= 0; i--) { if (items[i].y > maxY) items[i].y = maxY; if (i < items.length - 1 && items[i + 1].y - items[i].y < 18) items[i].y = items[i + 1].y - 18; }
+        const fl = ANIM.k === st.name && ANIM.prog < 1 ? 1 - ANIM.prog : 0;
+        ctx.font = 'bold 11px system-ui,sans-serif';
+        for (const it of items) {
+          const tw = ctx.measureText(it.txt).width + 10, x0 = w - 10 - tw;
+          if (Math.abs(it.y - it.y0) > 2) { ctx.strokeStyle = it.col; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, it.y); ctx.lineTo(x0 - 6, it.y0); ctx.stroke(); }
+          ctx.save();
+          if (it.harga && fl > 0) { ctx.shadowColor = it.col; ctx.shadowBlur = 14 * fl; }
+          ctx.fillStyle = it.col; ctx.fillRect(x0, it.y - 9, tw, 18);
+          ctx.restore();
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(it.txt, x0 + 5, it.y);
+        }
+        ctx.font = '11px system-ui,sans-serif';
       }
     }});
-  panel($('#cvR'), 110, {a, b, min: 0, max: 100, title: 'RSI (14)', fmt: v => v.toFixed(0),
+  panel($('#cvR'), 110, {a, b, R: RR, min: 0, max: 100, title: 'RSI (14)', fmt: v => v.toFixed(0),
     draw(ctx, X, Y, w){
       ctx.strokeStyle = cfgC.muted; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      for (const lv of [30, 70]) { ctx.beginPath(); ctx.moveTo(geoL(), Y(lv)); ctx.lineTo(w - 10, Y(lv)); ctx.stroke(); }
+      for (const lv of [30, 70]) { ctx.beginPath(); ctx.moveTo(geoL(), Y(lv)); ctx.lineTo(w - RR, Y(lv)); ctx.stroke(); }
       ctx.setLineDash([]); line(ctx, I.rsi, X, Y, a, b, cfgC.s3, 1.8);
     }});
   let [mlo, mhi] = rangeOf([I.macd, I.sig, I.hist]); const mm = Math.max(Math.abs(mlo), Math.abs(mhi)) * 1.1 || 1;
-  panel($('#cvM'), 110, {a, b, min: -mm, max: mm, title: 'MACD (garis biru), sinyal (putus-putus), histogram', fmt: v => fmtP(v, Math.abs(v) < 10 ? 1 : 0),
+  panel($('#cvM'), 110, {a, b, R: RR, min: -mm, max: mm, title: 'MACD (garis biru), sinyal (putus-putus), histogram', fmt: v => fmtP(v, Math.abs(v) < 10 ? 1 : 0),
     draw(ctx, X, Y, w){
-      const bw = Math.max(1, (w - 64) / (b - a + 1) * 0.6);
+      const bw = Math.max(1, (w - 54 - RR) / (b - a + 1) * 0.6);
       for (let i = a; i <= b; i++) if (I.hist[i] != null) {
         ctx.globalAlpha = 0.65; ctx.fillStyle = I.hist[i] >= 0 ? cfgC.s4 : cfgC.s2;
         const y0 = Y(0), y1 = Y(I.hist[i]); ctx.fillRect(X(i) - bw / 2, Math.min(y0, y1), bw, Math.max(1, Math.abs(y1 - y0)));
@@ -2660,14 +2768,15 @@ function drawCharts(st, bt){
       line(ctx, I.macd, X, Y, a, b, cfgC.s1, 1.6); line(ctx, I.sig, X, Y, a, b, cfgC.ink2, 1.4, [4, 3]);
     }});
   const scArr = I.sc.map(s => s ? s.total : null);
-  panel($('#cvS'), 120, {a, b, min: -100, max: 100, title: 'Skor robot (garis hijau = ambang beli, putus-putus abu = ambang keluar)', fmt: v => v.toFixed(0),
+  panel($('#cvS'), 120, {a, b, R: RR, min: -100, max: 100, title: 'Skor robot (garis hijau = ambang beli, putus-putus abu = ambang keluar)', fmt: v => v.toFixed(0),
     draw(ctx, X, Y, w){
       ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = cfgC.good; ctx.beginPath(); ctx.moveTo(geoL(), Y(S.cfg.entryTh)); ctx.lineTo(w - 10, Y(S.cfg.entryTh)); ctx.stroke();
-      ctx.strokeStyle = cfgC.muted; ctx.beginPath(); ctx.moveTo(geoL(), Y(S.cfg.exitTh)); ctx.lineTo(w - 10, Y(S.cfg.exitTh)); ctx.stroke();
+      ctx.strokeStyle = cfgC.good; ctx.beginPath(); ctx.moveTo(geoL(), Y(S.cfg.entryTh)); ctx.lineTo(w - RR, Y(S.cfg.entryTh)); ctx.stroke();
+      ctx.strokeStyle = cfgC.muted; ctx.beginPath(); ctx.moveTo(geoL(), Y(S.cfg.exitTh)); ctx.lineTo(w - RR, Y(S.cfg.exitTh)); ctx.stroke();
       ctx.setLineDash([]); line(ctx, scArr, X, Y, a, b, cfgC.s1, 1.8);
     }});
   LAST.geo = geo;
+  ovSiapkan(geo);
 
   // equity
   const eLen = bt.eq.length;
@@ -2685,7 +2794,7 @@ function bindHover(){
   const move = e => {
     if (!LAST) return;
     const {st, a, b} = LAST, {d, I} = st, r = cw.getBoundingClientRect();
-    const w = r.width, L = 54, R = 10, cnt = b - a + 1;
+    const w = r.width, L = 54, R = LAST.R || 10, cnt = b - a + 1;
     const x = e.clientX - r.left;
     if (x < L || x > w - R) return hide();
     const i = clamp(a + Math.floor((x - L) / (w - L - R) * cnt), a, b);
