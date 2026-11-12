@@ -423,6 +423,8 @@ function kartuLive(x, lama) {
 }
 function terapkanLive(j) {
   const r = data && data.ringkasan; if (!r || !j) return;
+  const semua = [].concat(r.beli || [], r.naik || [], r.jual || []), cocok = semua.filter(x => j.h && j.h[x.k] && j.h[x.k].p > 0).length;
+  if (!cocok) { statusLive('Google Finance belum mengirim harga berjalan (cek ' + (j.cek || '-') + ' WIB). Mencoba lagi otomatis.', false); return; }
   const bar = $('#liveBar'); bar.hidden = false; bar.classList.toggle('on', !!j.buka);
   $('#liveTx').textContent = j.buka ? 'Harga berjalan · tertunda ±15–20 menit (Google Finance) · terakhir cek ' + (j.cek || '') + ' WIB' : 'Pasar tutup · menampilkan harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : '');
   let ubah = false;
@@ -439,10 +441,14 @@ function terapkanLive(j) {
   }));
   if (ubah) tickerIsi(r);
 }
+function statusLive(teks, on) { const bar = $('#liveBar'); if (!bar) return; bar.hidden = false; bar.classList.toggle('on', !!on); $('#liveTx').textContent = teks; }
 async function tarikLive() {
   if (!data || $('#vIsi').hidden || document.hidden) return;
   try { terapkanLive(await api('hargaLive')); }
-  catch (e) { if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) keluarLokal(e.message); }
+  catch (e) {
+    if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) return keluarLokal(e.message);
+    statusLive(/Hanya admin|tidak dikenal/i.test(e.message) ? 'Harga berjalan belum aktif: Apps Script belum diperbarui (Deploy > Kelola deployment > Versi baru).' : 'Harga berjalan gagal dimuat: ' + e.message, false);
+  }
 }
 setInterval(tarikLive, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tarikLive(); });
