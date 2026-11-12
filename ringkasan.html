@@ -103,6 +103,10 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 @keyframes flU{0%{color:var(--beli);text-shadow:0 0 10px var(--beli)}100%{color:inherit;text-shadow:none}}
 @keyframes flD{0%{color:var(--jual);text-shadow:0 0 10px var(--jual)}100%{color:inherit;text-shadow:none}}
 @media (prefers-reduced-motion:reduce){.tick .trk{animation:none;padding-left:0}}
+.livebar{display:flex;align-items:center;gap:8px;margin:-4px 2px 12px;font-size:12px;color:var(--ink2)}
+.livebar .dt{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+.livebar.on .dt{background:var(--beli);animation:kedip 1.2s ease-in-out infinite}
+@keyframes kedip{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -138,6 +142,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
     </div>
     <div class="mkt" id="pasar" hidden></div>
     <div class="tick" id="tick" hidden><div class="trk" id="trk"></div></div>
+    <div class="livebar" id="liveBar" hidden><span class="dt"></span><span id="liveTx"></span></div>
     <div class="tabs" id="tabs">
       <button class="tab on" data-t="beli">Potensi beli<b id="nBeli">0</b></button>
       <button class="tab" data-t="naik">Potensi naik<b id="nNaik">0</b></button>
@@ -249,7 +254,7 @@ function render() {
   const arr = (r[tab] || []).filter(x => !band || x.band === band);
   const judulKosong = {beli: 'Belum ada saham yang memenuhi syarat potensi beli di kelompok harga ini.', naik: 'Belum ada saham dengan potensi naik yang kuat.', jual: 'Tidak ada saham dengan tanda turun tajam.'};
   $('#daftar').innerHTML = arr.length ? arr.map(x => item(x)).join('') : '<div class="kosong">' + judulKosong[tab] + '</div>';
-  tickerIsi(r); setTimeout(animasi, 30);
+  tickerIsi(r); setTimeout(animasi, 30); if (!data._liveTarik) { data._liveTarik = 1; setTimeout(tarikLive, 1200); }
   $('#stamp').textContent = 'Data penutupan: ' + (r.tgl || '-') + ' · dipindai ' + r.dipindai + ' saham · diperbarui ' + tglIndo(data.diperbarui) + ' WIB';
 }
 function spark(x) {
@@ -267,7 +272,7 @@ function spark(x) {
   const wrapA = '<div class="sw" data-v="' + v.join(',') + '" data-lo="' + lo + '" data-rg="' + rg + '"><span class="tip"></span><span class="mk"></span>', wrapB = '</div>';
   return wrapA + '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Grafik harga 30 hari terakhir ' + esc(x.k) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + col + '" stop-opacity=".35"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></linearGradient></defs>' +
     lines + '<polygon fill="url(#' + id + ')" points="' + px + ',' + H + ' ' + pts.join(' ') + ' ' + (W - px) + ',' + H + '"/><polyline fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="' + pts.join(' ') + '"/><circle class="ring" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/><circle class="dot" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/></svg>' + wrapB +
-    '<div class="sub" style="margin:0 0 4px;font-size:11px">Harga penutupan ' + v.length + ' hari terakhir' + (lv.length ? ' · garis putus: batas rugi (merah) &amp; target (hijau)' : '') + '</div>';
+    '<div class="sub" style="margin:0 0 4px;font-size:11px">' + (x._live ? 'Harga ' + v.length + ' hari terakhir (titik akhir = harga berjalan, tertunda)' : 'Harga penutupan ' + v.length + ' hari terakhir') + (lv.length ? ' · garis putus: batas rugi (merah) &amp; target (hijau)' : '') + '</div>';
 }
 function item(x) {
   const chg = x.chg || 0, cls = chg >= 0 ? 'up' : 'dn', bn = {a: '< 1.000', b: '1.000 - 5.000', c: '> 5.000'}[x.band] || '';
@@ -278,7 +283,7 @@ function item(x) {
   if (tab === 'beli') lv = '<div class="lv"><div class="m">Area masuk<b>' + rp(x.masuk) + '</b></div><div class="s">Batas rugi<b>' + rp(x.stop) + '</b></div><div class="t">Target awal<b>' + rp(x.target) + '</b></div></div>';
   const al = (x.alasan || []).length ? '<ul class="al">' + x.alasan.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul>' : '';
   const cat = (x.catatan || []).length ? '<div class="cat">Catatan: ' + esc(x.catatan[0]) + '</div>' : '';
-  return '<div class="item"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '<span class="band">' + bn + '</span></span><span class="harga"><span class="hg" data-to="' + x.harga + '" data-from="' + ((x.sp || [])[(x.sp || []).length - 2] || x.harga) + '">' + rp(x.harga) + '</span> <span class="pill ' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + spark(x) + lv + al + cat + '</div>';
+  return '<div class="item" data-k="' + esc(x.k) + '"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '<span class="band">' + bn + '</span></span><span class="harga"><span class="hg" data-to="' + x.harga + '" data-from="' + ((x.sp || [])[(x.sp || []).length - 2] || x.harga) + '">' + rp(x.harga) + '</span> <span class="pill ' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + spark(x) + lv + al + cat + '</div>';
 }
 function lengkapi(r) { ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEach(x => { if (!x.band) x.band = x.harga < 1000 ? 'a' : x.harga < 5000 ? 'b' : 'c'; })); return r; }
 async function muat() {
@@ -400,6 +405,47 @@ function pindaiGrafik() {
 }
 function animasi() { hitungHarga(); pindaiGrafik(); }
 setInterval(() => { if (!document.hidden && !$('#vIsi').hidden && !kurangi) pindaiGrafik(); }, 9000);
+
+/* Harga berjalan dari GOOGLEFINANCE (tertunda), ditarik tiap 30 detik */
+function hitungEl(el, from, to) {
+  el.classList.remove('up', 'dn'); void el.offsetWidth; el.classList.add(to >= from ? 'up' : 'dn');
+  if (kurangi) { el.textContent = rp(to); return; }
+  const t0 = performance.now(), dur = 700;
+  (function f(now) { const t = Math.min(1, (now - t0) / dur); el.textContent = rp(lerp(from, to, ease(t))); if (t < 1) requestAnimationFrame(f); else el.textContent = rp(to); })(t0);
+}
+function kartuLive(x, lama) {
+  const it = document.querySelector('.item[data-k="' + x.k + '"]'); if (!it) return;
+  const hg = it.querySelector('.hg'), pil = it.querySelector('.pill'), chg = x.chg || 0;
+  if (hg) hitungEl(hg, lama, x.harga);
+  if (pil) { pil.className = 'pill ' + (chg >= 0 ? 'up' : 'dn'); pil.textContent = (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%'; }
+  const sw = it.querySelector('.sw');
+  if (sw) { const tmp = document.createElement('div'); tmp.innerHTML = spark(x); const baru = tmp.querySelector('.sw'); if (baru) { sw.replaceWith(baru); pindaiGrafik(); } }
+}
+function terapkanLive(j) {
+  const r = data && data.ringkasan; if (!r || !j) return;
+  const bar = $('#liveBar'); bar.hidden = false; bar.classList.toggle('on', !!j.buka);
+  $('#liveTx').textContent = j.buka ? 'Harga berjalan · tertunda ±15–20 menit (Google Finance) · terakhir cek ' + (j.cek || '') + ' WIB' : 'Pasar tutup · menampilkan harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : '');
+  let ubah = false;
+  ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEach(x => {
+    const L = j.h && j.h[x.k]; if (!L || !(L.p > 0)) return;
+    if (Math.round(L.p) === Math.round(x.harga) && x._live) return;
+    const lama = x.harga; x.harga = L.p;
+    if (L.prev > 0) x.chg = Math.round((L.p - L.prev) / L.prev * 10000) / 100;
+    if (x.sp && x.sp.length) {
+      if (x._app || (L.t || '').slice(0, 10) === r.tgl) x.sp[x.sp.length - 1] = L.p; else { x.sp.push(L.p); x._app = true; }
+    }
+    const pertama = !x._live; x._live = 1; ubah = true;
+    if (Math.round(lama) !== Math.round(L.p) || pertama) kartuLive(x, lama);
+  }));
+  if (ubah) tickerIsi(r);
+}
+async function tarikLive() {
+  if (!data || $('#vIsi').hidden || document.hidden) return;
+  try { terapkanLive(await api('hargaLive')); }
+  catch (e) { if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) keluarLokal(e.message); }
+}
+setInterval(tarikLive, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tarikLive(); });
 </script>
 </body>
 </html>
