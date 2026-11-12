@@ -57,6 +57,10 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .wa{display:block;text-align:center;text-decoration:none;padding:12px;border-radius:10px;background:#25d366;color:#052e16;font-weight:700;font-size:15px}
 .tgb{display:block;width:100%;text-align:center;text-decoration:none;padding:11px;border:0;border-radius:10px;background:#229ed9;color:#fff;font-weight:700;font-size:15px;margin-bottom:8px}
 .tgb.alt{background:var(--card);color:var(--ink2);border:1px solid var(--line);font-weight:600}
+.note{margin:10px 0 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.65);color:#78350f;font-size:12.5px;line-height:1.45}
+.durs{display:flex;gap:8px;margin-bottom:10px}
+.dur{flex:1;padding:10px;border:2px solid rgba(120,53,15,.25);border-radius:10px;background:rgba(255,255,255,.6);color:#78350f;font-weight:700}
+.dur.on{border-color:#d97706;background:#fff}
 .upg{background:linear-gradient(135deg,#fef3c7,#fde68a);color:#78350f;border-color:transparent}
 .upg b{display:block;margin-bottom:2px}
 .sub{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
@@ -99,7 +103,15 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <p class="sub" id="tgInfo" style="margin:4px 0 10px"></p>
       <div id="tgAksi"></div>
     </div>
-    <div class="card upg" id="upg"><b>Ingin akses lebih lama atau versi penuh?</b><div style="font-size:13px;margin-bottom:10px">Perpanjang paket atau minta akses semua fitur langsung ke admin.</div><a class="wa" id="waUpg" href="#" target="_blank" rel="noopener">Perpanjang / upgrade via WhatsApp</a></div>
+    <div class="card upg" id="upg">
+      <b>Perpanjang masa aktif</b>
+      <div style="font-size:13px;margin-bottom:10px">Pilih durasi, lalu ajukan. Permintaan Anda langsung masuk ke admin.</div>
+      <div class="durs" id="durs"><button class="dur on" data-h="7">7 hari</button><button class="dur" data-h="30">30 hari</button></div>
+      <button class="wa" id="bAjukan" style="width:100%;border:0">Ajukan perpanjangan</button>
+      <p class="sub" id="reqInfo" style="margin:10px 0 0;color:#78350f"></p>
+      <p class="note" id="reqNote">⚠️ Ajukan perpanjangan <b>sebelum masa aktif berakhir</b>. Setelah akun berakhir, Anda tidak bisa masuk lagi dan harus menghubungi admin lewat WhatsApp.</p>
+      <a class="wa" id="waUpg" href="#" target="_blank" rel="noopener" style="margin-top:8px" hidden>Kirim bukti bayar via WhatsApp</a>
+    </div>
     <p class="sub" id="stamp"></p>
     <p class="disc">Ringkasan ini dihasilkan dari aturan indikator teknikal pada data penutupan, bukan ramalan. Bukan ajakan membeli atau menjual saham. Keputusan dan risikonya ada pada Anda sendiri.</p>
   </div>
@@ -114,6 +126,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;
 const rp = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 const WA = '628811466979';
 const waLink = t => 'https://wa.me/' + WA + '?text=' + encodeURIComponent(t);
+let durasi = 7;
 let token = '', data = null, tab = 'beli', band = '';
 try { token = localStorage.getItem(KUNCI) || ''; } catch (e) {}
 
@@ -167,7 +180,13 @@ function tglIndo(iso) { return iso ? iso.replace('T', ' ').slice(0, 16) : '-'; }
 
 function render() {
   if (!data) return;
-  $('#waUpg').href = waLink('Halo, saya ' + data.user.nama + ' (' + data.user.email + ') pengguna Ringkasan Sinyal Saham IDX. Saya ingin perpanjang / upgrade paket. Mohon info pilihan paket dan harganya.');
+  const rq = data.permintaan, wa = $('#waUpg');
+  document.querySelectorAll('.dur').forEach(b => b.classList.toggle('on', Number(b.dataset.h) === (rq ? rq.hari : durasi)));
+  if (rq) {
+    $('#reqInfo').textContent = 'Permintaan ' + rq.hari + ' hari sudah diterima admin (' + rq.waktu + '). Masa aktif bertambah setelah pembayaran dikonfirmasi.';
+    wa.hidden = false; wa.href = waLink('Halo, saya ' + data.user.nama + ' (' + data.user.email + '). Saya sudah mengajukan perpanjangan ' + rq.hari + ' hari di Ringkasan Sinyal Saham IDX. Berikut bukti pembayaran saya.');
+    $('#bAjukan').textContent = 'Ubah permintaan';
+  } else { $('#reqInfo').textContent = ''; wa.hidden = true; $('#bAjukan').textContent = 'Ajukan perpanjangan'; }
   const r = data.ringkasan, a = data.akun, m = masa(a);
   $('#uNama').textContent = data.user.nama;
   const c = $('#uMasa'); c.textContent = m.t; c.className = 'chip' + (m.warn ? ' warn' : '');
@@ -232,6 +251,13 @@ $('#fMasuk').addEventListener('submit', async ev => {
 });
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; tab = b.dataset.t; render(); });
 $('#bands').addEventListener('click', e => { const b = e.target.closest('.bd'); if (!b) return; band = b.dataset.b; render(); });
+$('#durs').addEventListener('click', e => { const b = e.target.closest('.dur'); if (!b) return; durasi = Number(b.dataset.h); document.querySelectorAll('.dur').forEach(x => x.classList.toggle('on', x === b)); });
+$('#bAjukan').onclick = async () => {
+  const b = $('#bAjukan'), t0 = b.textContent; b.disabled = true; b.textContent = 'Mengirim...';
+  try { await api('ajukanPerpanjang', {hari: durasi}); await muat(); }
+  catch (e) { $('#reqInfo').textContent = e.message; b.textContent = t0; }
+  b.disabled = false;
+};
 $('#bMuat').onclick = muat;
 $('#bKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
 $('#waMasuk').href = waLink('Halo, saya tertarik mencoba Robot Analisa Saham IDX (Ringkasan Sinyal). Mohon info akses coba atau perpanjangan.');
