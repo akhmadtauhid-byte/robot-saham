@@ -166,10 +166,11 @@ function item(x) {
   const cat = (x.catatan || []).length ? '<div class="cat">Catatan: ' + esc(x.catatan[0]) + '</div>' : '';
   return '<div class="item"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '<span class="band">' + bn + '</span></span><span class="harga">' + rp(x.harga) + ' <span class="pill ' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + spark(x) + lv + al + cat + '</div>';
 }
+function lengkapi(r) { ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEach(x => { if (!x.band) x.band = x.harga < 1000 ? 'a' : x.harga < 5000 ? 'b' : 'c'; })); return r; }
 async function muat() {
   $('#eIsi').textContent = '';
   try {
-    data = await api('ringkasan');
+    data = await api('ringkasan'); lengkapi(data.ringkasan);
     $('#vMasuk').hidden = true; $('#vIsi').hidden = false; render();
   } catch (e) {
     if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) return keluarLokal(e.message);
