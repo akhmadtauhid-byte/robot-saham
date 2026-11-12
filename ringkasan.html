@@ -81,6 +81,15 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
     </form>
     <p class="disc" style="margin:14px 0 8px">Belum punya akun, atau masa aktif sudah habis?</p>
     <a class="wa" id="waMasuk" href="#" target="_blank" rel="noopener">Hubungi admin via WhatsApp</a>
+    <button class="btn" id="bDemoBuka" type="button" style="margin-top:8px;background:linear-gradient(135deg,#f59e0b,#d97706)">Ajukan akses demo 1 hari (gratis)</button>
+    <form id="fDemo" hidden style="margin-top:12px">
+      <label>Nama<input id="dNama" type="text" maxlength="40" required></label>
+      <label>Email<input id="dEmail" type="email" required></label>
+      <label>Nomor WhatsApp<input id="dWa" type="tel" inputmode="numeric" placeholder="081234567890" required></label>
+      <input id="dWeb" type="text" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+      <button class="btn" id="bDemoKirim" type="submit">Kirim permintaan demo</button>
+      <p class="sub" id="eDemo" style="margin:8px 0 0"></p>
+    </form>
   </div>
 
   <div id="vIsi" hidden>
@@ -106,7 +115,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
     <div class="card upg" id="upg">
       <b>Perpanjang masa aktif</b>
       <div style="font-size:13px;margin-bottom:10px">Pilih durasi, lalu ajukan. Permintaan Anda langsung masuk ke admin.</div>
-      <div class="durs" id="durs"><button class="dur on" data-h="7">7 hari</button><button class="dur" data-h="30">30 hari</button></div>
+      <div class="durs" id="durs"><button class="dur" data-h="3">3 hari</button><button class="dur on" data-h="7">7 hari</button><button class="dur" data-h="30">30 hari</button></div>
       <button class="wa" id="bAjukan" style="width:100%;border:0">Ajukan perpanjangan</button>
       <p class="sub" id="reqInfo" style="margin:10px 0 0;color:#78350f"></p>
       <p class="note" id="reqNote">⚠️ Ajukan perpanjangan <b>sebelum masa aktif berakhir</b>. Setelah akun berakhir, Anda tidak bisa masuk lagi dan harus menghubungi admin lewat WhatsApp.</p>
@@ -252,6 +261,15 @@ $('#fMasuk').addEventListener('submit', async ev => {
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; tab = b.dataset.t; render(); });
 $('#bands').addEventListener('click', e => { const b = e.target.closest('.bd'); if (!b) return; band = b.dataset.b; render(); });
 $('#durs').addEventListener('click', e => { const b = e.target.closest('.dur'); if (!b) return; durasi = Number(b.dataset.h); document.querySelectorAll('.dur').forEach(x => x.classList.toggle('on', x === b)); });
+$('#bDemoBuka').onclick = () => { $('#fDemo').hidden = !$('#fDemo').hidden; };
+$('#fDemo').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const b = $('#bDemoKirim'), t0 = b.textContent, e = $('#eDemo'); b.disabled = true; b.textContent = 'Mengirim...'; e.textContent = ''; e.style.color = '';
+  try {
+    await api('ajukanDemo', {nama: $('#dNama').value.trim(), email: $('#dEmail').value.trim(), wa: $('#dWa').value.trim(), web: $('#dWeb').value});
+    $('#fDemo').innerHTML = '<p style="margin:0;color:var(--beli);font-weight:600">Permintaan terkirim ✅</p><p class="sub" style="margin-top:6px">Admin akan menghubungi Anda lewat WhatsApp setelah menyetujui. Akses demo berlaku 1 hari.</p>';
+  } catch (er) { e.textContent = er.message; e.style.color = 'var(--jual)'; b.disabled = false; b.textContent = t0; }
+});
 $('#bAjukan').onclick = async () => {
   const b = $('#bAjukan'), t0 = b.textContent; b.disabled = true; b.textContent = 'Mengirim...';
   try { await api('ajukanPerpanjang', {hari: durasi}); await muat(); }
