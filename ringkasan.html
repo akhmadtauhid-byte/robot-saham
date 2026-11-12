@@ -424,7 +424,7 @@ function kartuLive(x, lama) {
 function terapkanLive(j) {
   const r = data && data.ringkasan; if (!r || !j) return;
   const semua = [].concat(r.beli || [], r.naik || [], r.jual || []), cocok = semua.filter(x => j.h && j.h[x.k] && j.h[x.k].p > 0).length;
-  if (!cocok) { statusLive('Google Finance belum mengirim harga berjalan (cek ' + (j.cek || '-') + ' WIB). Mencoba lagi otomatis.', false); return; }
+  if (!cocok) { statusLive('Google Finance belum mengirim harga berjalan (cek ' + (j.cek || '-') + ' WIB)' + (j.dbg ? ' [' + j.dbg + ']' : '') + '. Mencoba lagi otomatis.', false); return; }
   const bar = $('#liveBar'); bar.hidden = false; bar.classList.toggle('on', !!j.buka);
   $('#liveTx').textContent = j.buka ? 'Harga berjalan · tertunda ±15–20 menit (Google Finance) · terakhir cek ' + (j.cek || '') + ' WIB' : 'Pasar tutup · menampilkan harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : '');
   let ubah = false;
