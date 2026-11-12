@@ -806,6 +806,8 @@ async function api(aksi, body){
   catch (e) { throw new Error('Respons bukan data. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.'); }
   if (!j.ok) {
     if (j.sesi === false && SES.token) keluarLokal('Sesi berakhir. Silakan masuk lagi.');
+    if (j.kedaluwarsa && SES.token) keluarLokal(j.error);
+    if (j.terbatas && SES.token) { location.replace('ringkasan.html'); }
     const er = new Error(j.error || 'Permintaan gagal.'); er.data = j; throw er;
   }
   return j;
@@ -1245,25 +1247,59 @@ function renderAdmin(j){
   const rows = j.pengguna.map(u => {
     const self = u.email === me;
     return `<tr><td>${esc(u.nama)}</td><td>${esc(u.email)}</td><td>${u.peran === 'admin' ? 'admin' : 'pengguna'}</td><td class="num">${u.saham}</td><td>${esc(u.login)}</td>
+      <td>${u.peran === 'admin' ? '-' : esc(u.paket === 'ringkasan' ? 'Ringkasan' : 'Penuh') + '<br><span class="note">' + (u.berakhir ? (u.sisa < 0 ? '<span class="neg">habis ' + esc(u.berakhir) + '</span>' : 's.d. ' + esc(u.berakhir) + ' (' + u.sisa + ' hari)') : 'tanpa batas') + '</span>'}</td>
       <td>${u.aktif ? '<span class="pos">aktif</span>' : '<span class="neg">nonaktif</span>'}</td>
       <td style="white-space:nowrap"><button class="seg" data-ad="aktif" data-id="${esc(u.id)}" data-on="${u.aktif ? 0 : 1}" ${self ? 'disabled' : ''}>${u.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
       <button class="seg" data-ad="reset" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Reset sandi</button>
+      <button class="seg" data-ad="pilih" data-id="${esc(u.id)}" data-em="${esc(u.email)}" ${u.peran === 'admin' ? 'disabled' : ''}>Atur paket</button>
       <button class="seg danger" data-ad="hapus" data-id="${esc(u.id)}" ${self ? 'disabled' : ''}>Hapus</button></td></tr>`;
   }).join('');
   $('#adminBody').innerHTML = `
     <p style="margin:0 0 8px">Kode undangan: ${j.undangan ? `<span class="code">${esc(j.undangan)}</span>` : '<b>(pendaftaran ditutup)</b>'}
       <button class="seg" data-ad="undBaru">Buat kode baru</button>${j.undangan ? ' <button class="seg" data-ad="undTutup">Tutup pendaftaran</button>' : ''}</p>
     <p class="note" style="margin-top:0">Pengguna ${j.pengguna.length}/${j.maksPengguna} · saham unik di sistem: ${j.kodeUnik}. Bagikan kode hanya ke orang yang Anda izinkan mendaftar.</p>
-    <div class="tblwrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th class="num">Saham</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="row" style="margin-top:10px"><button class="seg" data-ad="segarSemua">Perbarui data pasar semua saham</button><button class="seg" data-ad="muat">Muat ulang daftar</button></div>
+    <div class="tblwrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th class="num">Saham</th><th>Login terakhir</th><th>Paket / masa aktif</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="card" style="margin-top:12px;padding:10px">
+      <b>Atur paket &amp; masa aktif</b>
+      <p class="note" id="pkTarget" style="margin:4px 0">Pilih pengguna dengan tombol "Atur paket" di tabel.</p>
+      <div class="row">
+        <select id="pkLevel"><option value="ringkasan">Ringkasan saja</option><option value="penuh">Penuh</option></select>
+        <select id="pkHari"><option value="3">3 hari</option><option value="7">7 hari</option><option value="30">1 bulan (30 hari)</option><option value="0">Tanpa batas</option></select>
+        <select id="pkMode"><option value="ganti">Mulai dari hari ini</option><option value="tambah">Perpanjang dari tanggal berakhir</option></select>
+        <button class="seg" data-ad="terapkan">Terapkan</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;padding:10px">
+      <b>Buat akun langsung</b>
+      <p class="note" style="margin:4px 0">Tanpa kode undangan. Kata sandi sementara tampil sekali di bawah; sampaikan ke yang bersangkutan.</p>
+      <div class="row">
+        <input id="nbNama" type="text" placeholder="Nama" autocomplete="off"><input id="nbEmail" type="email" placeholder="Email" autocomplete="off">
+        <select id="nbLevel"><option value="ringkasan">Ringkasan saja</option><option value="penuh">Penuh</option></select>
+        <select id="nbHari"><option value="3">3 hari</option><option value="7">7 hari</option><option value="30">1 bulan (30 hari)</option><option value="0">Tanpa batas</option></select>
+        <button class="seg" data-ad="buatAkun">Buat akun</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="seg" data-ad="segarSemua">Perbarui data pasar semua saham</button><button class="seg" data-ad="muat">Muat ulang daftar</button><button class="seg" data-ad="ringBangun">Bangun ulang ringkasan</button></div>
     <div class="note" id="adStat" style="margin-top:6px"></div>`;
 }
+let adTarget = null;
 $('#adminBody').addEventListener('click', async e => {
   const b = e.target.closest('button[data-ad]'); if (!b || b.disabled) return;
   const a = b.dataset.ad, st = () => $('#adStat');
   const pesan = t => { if (st()) st().textContent = t; };
   try {
     if (a === 'muat') return muatAdmin();
+    if (a === 'pilih') { adTarget = {id: b.dataset.id, em: b.dataset.em}; $('#pkTarget').textContent = 'Pengguna terpilih: ' + b.dataset.em; return; }
+    if (a === 'terapkan') {
+      if (!adTarget) return pesan('Pilih pengguna dulu dengan tombol "Atur paket".');
+      const j = await api('setPaket', {id: adTarget.id, level: $('#pkLevel').value, hari: Number($('#pkHari').value), mode: $('#pkMode').value});
+      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = 'Paket ' + adTarget.em + ' diubah: ' + j.paket + (j.berakhir ? ', berlaku sampai ' + j.berakhir : ', tanpa batas') + '.'; return;
+    }
+    if (a === 'buatAkun') {
+      const j = await api('buatAkun', {nama: $('#nbNama').value, email: $('#nbEmail').value, level: $('#nbLevel').value, hari: Number($('#nbHari').value)});
+      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = 'Akun dibuat: ' + j.email + ' · kata sandi sementara: ' + j.sandiSementara + (j.berakhir ? ' · berlaku sampai ' + j.berakhir : ' · tanpa batas') + '. Sampaikan ke yang bersangkutan; minta segera diganti.'; return;
+    }
+    if (a === 'ringBangun') { const j = await api('ringkasanBangun'); pesan('Ringkasan diperbarui: ' + j.beli + ' potensi beli, ' + j.naik + ' potensi naik, ' + j.jual + ' potensi jual.'); return; }
     if (a === 'hapus' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Yakin hapus?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Hapus'; }, 4000); return; }
     if (a === 'undBaru') { await api('undanganBaru'); return muatAdmin(); }
     if (a === 'undTutup') { await api('undanganTutup'); return muatAdmin(); }
