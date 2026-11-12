@@ -54,6 +54,9 @@ button{font:inherit;cursor:pointer}
 ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .cat{font-size:12px;color:var(--warn);margin-top:4px}
 .kosong{color:var(--muted);text-align:center;padding:22px 0;font-size:14px}
+.wa{display:block;text-align:center;text-decoration:none;padding:12px;border-radius:10px;background:#25d366;color:#052e16;font-weight:700;font-size:15px}
+.upg{background:linear-gradient(135deg,#fef3c7,#fde68a);color:#78350f;border-color:transparent}
+.upg b{display:block;margin-bottom:2px}
 .sub{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
 .disc{font-size:12px;color:var(--muted);line-height:1.5}
 [hidden]{display:none!important}
@@ -70,7 +73,8 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <button class="btn" id="bMasuk" type="submit">Masuk</button>
       <p class="err" id="eMasuk"></p>
     </form>
-    <p class="disc">Belum punya akun? Hubungi admin lewat WhatsApp untuk akses coba.</p>
+    <p class="disc" style="margin:14px 0 8px">Belum punya akun, atau masa aktif sudah habis?</p>
+    <a class="wa" id="waMasuk" href="#" target="_blank" rel="noopener">Hubungi admin via WhatsApp</a>
   </div>
 
   <div id="vIsi" hidden>
@@ -88,6 +92,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <button class="bd on" data-b="">Semua harga</button><button class="bd" data-b="a">&lt; 1.000</button><button class="bd" data-b="b">1.000 - 5.000</button><button class="bd" data-b="c">&gt; 5.000</button>
     </div>
     <div class="card" id="daftar"></div>
+    <div class="card upg" id="upg"><b>Ingin akses lebih lama atau versi penuh?</b><div style="font-size:13px;margin-bottom:10px">Perpanjang paket atau minta akses semua fitur langsung ke admin.</div><a class="wa" id="waUpg" href="#" target="_blank" rel="noopener">Perpanjang / upgrade via WhatsApp</a></div>
     <p class="sub" id="stamp"></p>
     <p class="disc">Ringkasan ini dihasilkan dari aturan indikator teknikal pada data penutupan, bukan ramalan. Bukan ajakan membeli atau menjual saham. Keputusan dan risikonya ada pada Anda sendiri.</p>
   </div>
@@ -100,6 +105,8 @@ const KUNCI = 'ringkasan_token';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rp = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
+const WA = '628811466979';
+const waLink = t => 'https://wa.me/' + WA + '?text=' + encodeURIComponent(t);
 let token = '', data = null, tab = 'beli', band = '';
 try { token = localStorage.getItem(KUNCI) || ''; } catch (e) {}
 
@@ -125,6 +132,7 @@ function tglIndo(iso) { return iso ? iso.replace('T', ' ').slice(0, 16) : '-'; }
 
 function render() {
   if (!data) return;
+  $('#waUpg').href = waLink('Halo, saya ' + data.user.nama + ' (' + data.user.email + ') pengguna Ringkasan Sinyal Saham IDX. Saya ingin perpanjang / upgrade paket. Mohon info pilihan paket dan harganya.');
   const r = data.ringkasan, a = data.akun, m = masa(a);
   $('#uNama').textContent = data.user.nama;
   const c = $('#uMasa'); c.textContent = m.t; c.className = 'chip' + (m.warn ? ' warn' : '');
@@ -191,6 +199,7 @@ $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); 
 $('#bands').addEventListener('click', e => { const b = e.target.closest('.bd'); if (!b) return; band = b.dataset.b; render(); });
 $('#bMuat').onclick = muat;
 $('#bKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
+$('#waMasuk').href = waLink('Halo, saya tertarik mencoba Robot Analisa Saham IDX (Ringkasan Sinyal). Mohon info akses coba atau perpanjangan.');
 if (token) muat();
 </script>
 </body>
