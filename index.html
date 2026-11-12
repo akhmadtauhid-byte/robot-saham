@@ -1246,11 +1246,12 @@ function renderAdmin(j){
   const me = SES.user ? SES.user.email : '';
   const rows = j.pengguna.map(u => {
     const self = u.email === me;
-    return `<tr><td>${esc(u.nama)}</td><td>${esc(u.email)}</td><td>${u.peran === 'admin' ? 'admin' : 'pengguna'}</td><td class="num">${u.saham}</td><td>${esc(u.login)}</td>
+    return `<tr><td>${esc(u.nama)}</td><td>${esc(u.email)}</td><td>${u.peran === 'admin' ? (u.super ? 'super admin' : 'admin') : 'pengguna'}</td><td class="num">${u.saham}</td><td>${esc(u.login)}</td>
       <td>${u.peran === 'admin' ? '-' : esc(u.paket === 'ringkasan' ? 'Ringkasan' : 'Penuh') + '<br><span class="note">' + (u.berakhir ? (u.sisa < 0 ? '<span class="neg">habis ' + esc(u.berakhir) + '</span>' : 's.d. ' + esc(u.berakhir) + ' (' + u.sisa + ' hari)') : 'tanpa batas') + '</span>'}</td>
       <td>${u.aktif ? '<span class="pos">aktif</span>' : '<span class="neg">nonaktif</span>'}</td>
       <td style="white-space:nowrap"><button class="seg" data-ad="aktif" data-id="${esc(u.id)}" data-on="${u.aktif ? 0 : 1}" ${self ? 'disabled' : ''}>${u.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
       <button class="seg" data-ad="reset" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Reset sandi</button>
+      ${j.saya && j.saya.super && u.peran !== 'admin' ? `<button class="seg" data-ad="jadiAdmin" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Jadikan admin</button>` : ''}${j.saya && j.saya.super && u.peran === 'admin' && !u.super ? `<button class="seg" data-ad="cabutAdmin" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Cabut admin</button>` : ''}
       <button class="seg" data-ad="pilih" data-id="${esc(u.id)}" data-em="${esc(u.email)}" ${u.peran === 'admin' ? 'disabled' : ''}>Atur paket</button>
       <button class="seg danger" data-ad="hapus" data-id="${esc(u.id)}" ${self ? 'disabled' : ''}>Hapus</button></td></tr>`;
   }).join('');
@@ -1281,7 +1282,7 @@ function renderAdmin(j){
       <b>Buat akun langsung</b>
       <p class="note" style="margin:4px 0">Tanpa kode undangan. Kata sandi sementara tampil sekali di bawah; sampaikan ke yang bersangkutan.</p>
       <div class="row">
-        <input id="nbNama" type="text" placeholder="Nama" autocomplete="off"><input id="nbEmail" type="email" placeholder="Email" autocomplete="off">
+        <input id="nbNama" type="text" placeholder="Nama" autocomplete="off"><input id="nbEmail" type="email" placeholder="Email" autocomplete="off"><input id="nbWa" type="tel" placeholder="WhatsApp (opsional)" autocomplete="off">
         <select id="nbLevel"><option value="ringkasan">Ringkasan saja</option><option value="penuh">Penuh</option></select>
         <select id="nbHari"><option value="1" selected>Demo 1 hari (sampai akhir hari ini)</option><option value="3">3 hari</option><option value="7">7 hari</option><option value="30">1 bulan (30 hari)</option><option value="0">Tanpa batas</option></select>
         <button class="seg" data-ad="buatAkun">Buat akun</button>
@@ -1291,6 +1292,14 @@ function renderAdmin(j){
     <div class="note" id="adStat" style="margin-top:6px"></div>`;
 }
 let adTarget = null;
+// Tautan WhatsApp berisi akun + kata sandi sementara. Bila nomor pengguna tersimpan, langsung ke nomor itu; bila tidak, WhatsApp membuka pilihan kontak.
+function tautAkunWA(j, jenis) {
+  const url = new URL('ringkasan.html', location.href).href;
+  const buka = jenis === 'reset' ? 'kata sandi akun Robot Analisa Saham IDX Anda sudah diatur ulang.' : 'akun Robot Analisa Saham IDX Anda sudah aktif.';
+  const masa = jenis === 'demo' ? '\nBerlaku sampai akhir hari ini (' + j.berakhir + ').' : (j.berakhir ? '\nBerlaku sampai ' + j.berakhir + '.' : '');
+  const teks = 'Halo ' + (j.nama || '') + ', ' + buka + '\nAlamat: ' + url + '\nEmail: ' + j.email + '\nKata sandi sementara: ' + j.sandiSementara + masa + '\nKetik persis seperti di atas. Setelah masuk, silakan ganti kata sandi.';
+  return '<a href="https://wa.me/' + (j.wa ? esc(j.wa) : '') + '?text=' + encodeURIComponent(teks) + '" target="_blank" rel="noopener">' + (j.wa ? 'Kirim ke WhatsApp ' + esc(j.nama || '') : 'Kirim via WhatsApp (pilih kontak)') + '</a>';
+}
 $('#adminBody').addEventListener('click', async e => {
   const b = e.target.closest('button[data-ad]'); if (!b || b.disabled) return;
   const a = b.dataset.ad, st = () => $('#adStat');
@@ -1301,9 +1310,7 @@ $('#adminBody').addEventListener('click', async e => {
       const j = await api(a === 'demoSetuju' ? 'demoSetuju' : 'demoTolak', {id: b.dataset.id});
       await muatAdmin(); const s2 = $('#adStat'); if (!s2) return;
       if (a === 'demoTolak') { s2.textContent = 'Permintaan demo ditolak.'; return; }
-      const url = new URL('ringkasan.html', location.href).href;
-      const teks = 'Halo ' + j.nama + ', akun demo Robot Analisa Saham IDX Anda sudah aktif.\nAlamat: ' + url + '\nEmail: ' + j.email + '\nKata sandi sementara: ' + j.sandiSementara + '\nBerlaku sampai akhir hari ini (' + j.berakhir + ').\nSetelah masuk, silakan ganti kata sandi.';
-      s2.innerHTML = 'Akun demo dibuat untuk ' + esc(j.email) + ' · kata sandi sementara: <b>' + esc(j.sandiSementara) + '</b> · <a href="https://wa.me/' + esc(j.wa) + '?text=' + encodeURIComponent(teks) + '" target="_blank" rel="noopener">Kirim ke WhatsApp ' + esc(j.nama) + '</a>';
+      s2.innerHTML = 'Akun demo dibuat untuk ' + esc(j.email) + ' · kata sandi sementara: <b>' + esc(j.sandiSementara) + '</b> · ' + tautAkunWA(j, 'demo');
       return;
     }
     if (a === 'reqSetuju' || a === 'reqTolak') {
@@ -1317,16 +1324,21 @@ $('#adminBody').addEventListener('click', async e => {
       await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = 'Paket ' + adTarget.em + ' diubah: ' + j.paket + (j.berakhir ? ', berlaku sampai ' + j.berakhir : ', tanpa batas') + '.'; return;
     }
     if (a === 'buatAkun') {
-      const j = await api('buatAkun', {nama: $('#nbNama').value, email: $('#nbEmail').value, level: $('#nbLevel').value, hari: Number($('#nbHari').value)});
-      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = 'Akun dibuat: ' + j.email + ' · kata sandi sementara: ' + j.sandiSementara + (j.berakhir ? ' · berlaku sampai ' + j.berakhir : ' · tanpa batas') + '. Sampaikan ke yang bersangkutan; minta segera diganti.'; return;
+      const j = await api('buatAkun', {nama: $('#nbNama').value, email: $('#nbEmail').value, level: $('#nbLevel').value, hari: Number($('#nbHari').value), wa: $('#nbWa').value});
+      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.innerHTML = 'Akun dibuat: ' + esc(j.email) + ' · kata sandi sementara: <b>' + esc(j.sandiSementara) + '</b>' + (j.berakhir ? ' · berlaku sampai ' + esc(j.berakhir) : ' · tanpa batas') + ' · ' + tautAkunWA(j, 'baru'); return;
     }
     if (a === 'ringBangun') { const j = await api('ringkasanBangun'); pesan('Ringkasan diperbarui: ' + j.beli + ' potensi beli, ' + j.naik + ' potensi naik, ' + j.jual + ' potensi jual.'); return; }
+    if (a === 'jadiAdmin' || a === 'cabutAdmin') {
+      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; const t0 = b.textContent; b.textContent = 'Yakin?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = t0; }, 4000); return; }
+      await api(a === 'jadiAdmin' ? 'jadikanAdmin' : 'cabutAdmin', {id: b.dataset.id}); await muatAdmin();
+      const s2 = $('#adStat'); if (s2) s2.textContent = (a === 'jadiAdmin' ? 'Dijadikan admin: ' : 'Admin dicabut: ') + b.dataset.em + '. Ia perlu keluar lalu masuk lagi agar perubahan berlaku.'; return;
+    }
     if (a === 'hapus' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Yakin hapus?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Hapus'; }, 4000); return; }
     if (a === 'undBaru') { await api('undanganBaru'); return muatAdmin(); }
     if (a === 'undTutup') { await api('undanganTutup'); return muatAdmin(); }
     if (a === 'aktif') { await api('setAktif', {id: b.dataset.id, aktif: b.dataset.on === '1'}); return muatAdmin(); }
     if (a === 'hapus') { await api('hapusPengguna', {id: b.dataset.id}); return muatAdmin(); }
-    if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara + ' (sampaikan ke yang bersangkutan; minta segera diganti).'); return; }
+    if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); const s2 = $('#adStat'); if (s2) { s2.innerHTML = 'Kata sandi sementara untuk ' + esc(j.email) + ': <b>' + esc(j.sandiSementara) + '</b> · ' + tautAkunWA(j, 'reset'); s2.scrollIntoView({block: 'center'}); } else pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara); return; }
     if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); const g0 = j.segar; pesan(g0.ok.length + g0.gagal.length + g0.sisa === 0 ? 'Semua data sudah baru, tidak ada yang perlu diperbarui.' : 'Selesai: ' + g0.ok.length + ' berhasil, ' + g0.gagal.length + ' gagal, ' + g0.sisa + ' belum sempat (tekan lagi).'); if (g0.ok.length) { muatUlangWatchlist(); PASAR.busy = false; muatPasar(); } }
   } catch (err) { pesan(err.message); }
 });
