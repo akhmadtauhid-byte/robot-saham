@@ -65,6 +65,15 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .upg b{display:block;margin-bottom:2px}
 .sub{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
 .disc{font-size:12px;color:var(--muted);line-height:1.5}
+.bayar{margin-top:12px;border-top:1px dashed rgba(120,53,15,.3);padding-top:12px}
+.login-bayar{margin-top:14px;padding:14px;border-radius:14px;background:linear-gradient(135deg,#fef3c7,#fde68a);color:#78350f}
+.hrg{display:flex;gap:6px;margin:8px 0 12px}
+.hrg div{flex:1;text-align:center;padding:8px 4px;border-radius:10px;background:rgba(255,255,255,.75);font-size:12px}
+.hrg b{display:block;font-size:15px}.hrg i{display:block;font-style:normal;font-size:10.5px;color:#b45309}
+.rek{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border-radius:10px;background:rgba(255,255,255,.75);font-size:13px}
+.rek span{display:block;font-size:11px;color:#92400e}.rek b{font-variant-numeric:tabular-nums;letter-spacing:.3px}
+.rek button{flex:none;padding:6px 10px;border:0;border-radius:8px;background:#92400e;color:#fff;font-size:12px}
+.qris{display:block;max-width:220px;width:100%;margin:8px auto 0;border-radius:10px;background:#fff}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -81,6 +90,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
     </form>
     <p class="disc" style="margin:14px 0 8px">Belum punya akun, atau masa aktif sudah habis?</p>
     <a class="wa" id="waMasuk" href="#" target="_blank" rel="noopener">Hubungi admin via WhatsApp</a>
+    <div class="login-bayar"><b>Harga paket &amp; cara bayar</b><div data-bayar></div></div>
     <button class="btn" id="bDemoBuka" type="button" style="margin-top:8px;background:linear-gradient(135deg,#f59e0b,#d97706)">Ajukan akses demo 1 hari (gratis)</button>
     <form id="fDemo" hidden style="margin-top:12px">
       <label>Nama<input id="dNama" type="text" maxlength="40" required></label>
@@ -115,11 +125,12 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
     <div class="card upg" id="upg">
       <b>Perpanjang masa aktif</b>
       <div style="font-size:13px;margin-bottom:10px">Pilih durasi, lalu ajukan. Permintaan Anda langsung masuk ke admin.</div>
-      <div class="durs" id="durs"><button class="dur" data-h="3">3 hari</button><button class="dur on" data-h="7">7 hari</button><button class="dur" data-h="30">30 hari</button></div>
+      <div class="durs" id="durs"><button class="dur" data-h="3">3 hari<br><small>Rp15.000</small></button><button class="dur on" data-h="7">7 hari<br><small>Rp25.000</small></button><button class="dur" data-h="30">30 hari<br><small>Rp65.000</small></button></div>
       <button class="wa" id="bAjukan" style="width:100%;border:0">Ajukan perpanjangan</button>
       <p class="sub" id="reqInfo" style="margin:10px 0 0;color:#78350f"></p>
       <p class="note" id="reqNote">⚠️ Ajukan perpanjangan <b>sebelum masa aktif berakhir</b>. Setelah akun berakhir, Anda tidak bisa masuk lagi dan harus menghubungi admin lewat WhatsApp.</p>
       <a class="wa" id="waUpg" href="#" target="_blank" rel="noopener" style="margin-top:8px" hidden>Kirim bukti bayar via WhatsApp</a>
+      <div class="bayar" data-bayar></div>
     </div>
     <p class="sub" id="stamp"></p>
     <p class="disc">Ringkasan ini dihasilkan dari aturan indikator teknikal pada data penutupan, bukan ramalan. Bukan ajakan membeli atau menjual saham. Keputusan dan risikonya ada pada Anda sendiri.</p>
@@ -241,7 +252,7 @@ function lengkapi(r) { ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEac
 async function muat() {
   $('#eIsi').textContent = '';
   try {
-    data = await api('ringkasan'); lengkapi(data.ringkasan);
+    data = await api('ringkasan'); lengkapi(data.ringkasan); setHarga(data.harga);
     $('#vMasuk').hidden = true; $('#vIsi').hidden = false; render(); muatTg();
   } catch (e) {
     if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) return keluarLokal(e.message);
@@ -280,6 +291,27 @@ $('#bMuat').onclick = muat;
 $('#bKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
 $('#waMasuk').href = waLink('Halo, saya tertarik mencoba Robot Analisa Saham IDX (Ringkasan Sinyal). Mohon info akses coba atau perpanjangan.');
 if (token) muat();
+
+/* Harga paket & cara bayar (diatur admin) */
+const RP = n => 'Rp' + Number(n).toLocaleString('id-ID');
+let HARGA = {h3: 15000, h7: 25000, h30: 65000, rek: [{n: 'Transfer BCA', v: '0374826103'}, {n: 'DANA', v: '085257008575'}]};
+function gambarHarga() {
+  const html = '<div class="hrg"><div>3 hari<b>' + RP(HARGA.h3) + '</b></div><div>7 hari<b>' + RP(HARGA.h7) + '</b></div><div>30 hari<b>' + RP(HARGA.h30) + '</b><i>paling hemat</i></div></div>'
+    + HARGA.rek.map(r => '<div class="rek"><div><span>' + esc(r.n) + '</span><b>' + esc(r.v) + '</b></div><button type="button" data-salin="' + esc(r.v) + '">Salin</button></div>').join('')
+    + '<img class="qris" src="qris.png" alt="QRIS" onerror="this.remove()">'
+    + '<p class="sub" style="margin:8px 0 0;color:#78350f">Setelah membayar, kirim bukti bayar lewat WhatsApp dan sebutkan paket yang dipilih.</p>';
+  document.querySelectorAll('[data-bayar]').forEach(e => e.innerHTML = html);
+  [['3', HARGA.h3], ['7', HARGA.h7], ['30', HARGA.h30]].forEach(x => { const b = document.querySelector('.dur[data-h="' + x[0] + '"] small'); if (b) b.textContent = RP(x[1]); });
+}
+function setHarga(h) { if (h && h.rek) { HARGA = h; gambarHarga(); } }
+gambarHarga();
+api('harga').then(j => setHarga(j.harga)).catch(() => {});
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-salin]'); if (!b) return;
+  const t0 = b.textContent;
+  try { await navigator.clipboard.writeText(b.dataset.salin); b.textContent = 'Tersalin'; } catch (e) { b.textContent = 'Salin manual'; }
+  setTimeout(() => b.textContent = t0, 1500);
+});
 </script>
 </body>
 </html>
