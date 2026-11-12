@@ -1278,6 +1278,15 @@ function renderAdmin(j){
         <button class="seg" data-ad="terapkan">Terapkan</button>
       </div>
     </div>
+    ${j.saya && j.saya.super && j.harga ? `<div class="card" style="margin-top:12px;padding:10px">
+      <b>Harga &amp; pembayaran</b>
+      <p class="note" style="margin:4px 0">Tampil di halaman ringkasan (login dan perpanjangan). Hanya super admin yang dapat mengubah.</p>
+      <div class="row">
+        <input id="hg3" type="tel" inputmode="numeric" placeholder="Harga 3 hari" value="${esc(j.harga.h3)}"><input id="hg7" type="tel" inputmode="numeric" placeholder="Harga 7 hari" value="${esc(j.harga.h7)}"><input id="hg30" type="tel" inputmode="numeric" placeholder="Harga 30 hari" value="${esc(j.harga.h30)}">
+      </div>
+      ${[0, 1, 2, 3].map(i => { const r = j.harga.rek[i] || {n: '', v: ''}; return `<div class="row"><input class="hgN" type="text" maxlength="30" placeholder="Nama (mis. BCA / DANA)" value="${esc(r.n)}"><input class="hgV" type="text" maxlength="40" placeholder="Nomor rekening / e-wallet" value="${esc(r.v)}"></div>`; }).join('')}
+      <div class="row"><button class="seg" data-ad="hargaSimpan">Simpan harga</button></div>
+    </div>` : ''}
     <div class="card" style="margin-top:12px;padding:10px">
       <b>Buat akun langsung</b>
       <p class="note" style="margin:4px 0">Tanpa kode undangan. Kata sandi sementara tampil sekali di bawah; sampaikan ke yang bersangkutan.</p>
@@ -1326,6 +1335,11 @@ $('#adminBody').addEventListener('click', async e => {
     if (a === 'buatAkun') {
       const j = await api('buatAkun', {nama: $('#nbNama').value, email: $('#nbEmail').value, level: $('#nbLevel').value, hari: Number($('#nbHari').value), wa: $('#nbWa').value});
       await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.innerHTML = 'Akun dibuat: ' + esc(j.email) + ' · kata sandi sementara: <b>' + esc(j.sandiSementara) + '</b>' + (j.berakhir ? ' · berlaku sampai ' + esc(j.berakhir) : ' · tanpa batas') + ' · ' + tautAkunWA(j, 'baru'); return;
+    }
+    if (a === 'hargaSimpan') {
+      const rek = [...document.querySelectorAll('.hgN')].map((el, i) => ({n: el.value, v: document.querySelectorAll('.hgV')[i].value}));
+      await api('hargaSimpan', {h3: $('#hg3').value, h7: $('#hg7').value, h30: $('#hg30').value, rek});
+      pesan('Harga & pembayaran disimpan. Halaman ringkasan memakai nilai baru saat dimuat ulang.'); return;
     }
     if (a === 'ringBangun') { const j = await api('ringkasanBangun'); pesan('Ringkasan diperbarui: ' + j.beli + ' potensi beli, ' + j.naik + ' potensi naik, ' + j.jual + ' potensi jual.'); return; }
     if (a === 'jadiAdmin' || a === 'cabutAdmin') {
