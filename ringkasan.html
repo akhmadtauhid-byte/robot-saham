@@ -90,6 +90,19 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .pw{position:relative;display:block}.pw input{padding-right:78px}
 .pw button{position:absolute;right:6px;bottom:6px;padding:6px 10px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:var(--acc);font-size:13px}
 @media (prefers-reduced-motion:reduce){.spark,.spark .dot,.spark .ring,.item{animation:none}}
+.tick{overflow:hidden;white-space:nowrap;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.04);margin-bottom:12px;padding:7px 0;font-size:13px}
+.tick .trk{display:inline-block;padding-left:100%;animation:jalan 28s linear infinite}
+.tick span{display:inline-block;margin-right:22px;font-variant-numeric:tabular-nums}
+.tick b{color:var(--ink)}.tick .u{color:var(--beli)}.tick .d{color:var(--jual)}
+@keyframes jalan{to{transform:translateX(-100%)}}
+.sw{position:relative}
+.sw .tip{position:absolute;top:0;left:0;transform:translate(-50%,-135%);padding:2px 7px;border-radius:7px;background:var(--ink);color:var(--bg);font-size:11px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;opacity:0;pointer-events:none;transition:opacity .15s}
+.sw .mk{position:absolute;top:0;left:0;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.25);opacity:0;pointer-events:none}
+.sw.on .tip,.sw.on .mk{opacity:1}
+.hg.up{animation:flU .9s ease-out}.hg.dn{animation:flD .9s ease-out}
+@keyframes flU{0%{color:var(--beli);text-shadow:0 0 10px var(--beli)}100%{color:inherit;text-shadow:none}}
+@keyframes flD{0%{color:var(--jual);text-shadow:0 0 10px var(--jual)}100%{color:inherit;text-shadow:none}}
+@media (prefers-reduced-motion:reduce){.tick .trk{animation:none;padding-left:0}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -124,6 +137,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <div><button class="link" id="bMuat">Muat ulang</button> · <button class="link" id="bKeluar">Keluar</button></div>
     </div>
     <div class="mkt" id="pasar" hidden></div>
+    <div class="tick" id="tick" hidden><div class="trk" id="trk"></div></div>
     <div class="tabs" id="tabs">
       <button class="tab on" data-t="beli">Potensi beli<b id="nBeli">0</b></button>
       <button class="tab" data-t="naik">Potensi naik<b id="nNaik">0</b></button>
@@ -235,6 +249,7 @@ function render() {
   const arr = (r[tab] || []).filter(x => !band || x.band === band);
   const judulKosong = {beli: 'Belum ada saham yang memenuhi syarat potensi beli di kelompok harga ini.', naik: 'Belum ada saham dengan potensi naik yang kuat.', jual: 'Tidak ada saham dengan tanda turun tajam.'};
   $('#daftar').innerHTML = arr.length ? arr.map(x => item(x)).join('') : '<div class="kosong">' + judulKosong[tab] + '</div>';
+  tickerIsi(r); setTimeout(animasi, 30);
   $('#stamp').textContent = 'Data penutupan: ' + (r.tgl || '-') + ' · dipindai ' + r.dipindai + ' saham · diperbarui ' + tglIndo(data.diperbarui) + ' WIB';
 }
 function spark(x) {
@@ -249,8 +264,9 @@ function spark(x) {
   const id = 'g' + Math.random().toString(36).slice(2, 8);
   const lines = lv.filter(l => l[0] > 0).map(l => '<line x1="0" x2="' + W + '" y1="' + Y(l[0]).toFixed(1) + '" y2="' + Y(l[0]).toFixed(1) + '" stroke="' + l[1] + '" stroke-width="1" stroke-dasharray="4 3" opacity=".7"/>').join('');
   const ex = X(v.length - 1), ey = Y(v[v.length - 1]);
-  return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Grafik harga 30 hari terakhir ' + esc(x.k) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + col + '" stop-opacity=".35"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></linearGradient></defs>' +
-    lines + '<polygon fill="url(#' + id + ')" points="' + px + ',' + H + ' ' + pts.join(' ') + ' ' + (W - px) + ',' + H + '"/><polyline fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="' + pts.join(' ') + '"/><circle class="ring" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/><circle class="dot" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/></svg>' +
+  const wrapA = '<div class="sw" data-v="' + v.join(',') + '" data-lo="' + lo + '" data-rg="' + rg + '"><span class="tip"></span><span class="mk"></span>', wrapB = '</div>';
+  return wrapA + '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Grafik harga 30 hari terakhir ' + esc(x.k) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + col + '" stop-opacity=".35"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></linearGradient></defs>' +
+    lines + '<polygon fill="url(#' + id + ')" points="' + px + ',' + H + ' ' + pts.join(' ') + ' ' + (W - px) + ',' + H + '"/><polyline fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="' + pts.join(' ') + '"/><circle class="ring" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/><circle class="dot" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/></svg>' + wrapB +
     '<div class="sub" style="margin:0 0 4px;font-size:11px">Harga penutupan ' + v.length + ' hari terakhir' + (lv.length ? ' · garis putus: batas rugi (merah) &amp; target (hijau)' : '') + '</div>';
 }
 function item(x) {
@@ -262,7 +278,7 @@ function item(x) {
   if (tab === 'beli') lv = '<div class="lv"><div class="m">Area masuk<b>' + rp(x.masuk) + '</b></div><div class="s">Batas rugi<b>' + rp(x.stop) + '</b></div><div class="t">Target awal<b>' + rp(x.target) + '</b></div></div>';
   const al = (x.alasan || []).length ? '<ul class="al">' + x.alasan.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul>' : '';
   const cat = (x.catatan || []).length ? '<div class="cat">Catatan: ' + esc(x.catatan[0]) + '</div>' : '';
-  return '<div class="item"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '<span class="band">' + bn + '</span></span><span class="harga">' + rp(x.harga) + ' <span class="pill ' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + spark(x) + lv + al + cat + '</div>';
+  return '<div class="item"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '<span class="band">' + bn + '</span></span><span class="harga"><span class="hg" data-to="' + x.harga + '" data-from="' + ((x.sp || [])[(x.sp || []).length - 2] || x.harga) + '">' + rp(x.harga) + '</span> <span class="pill ' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + spark(x) + lv + al + cat + '</div>';
 }
 function lengkapi(r) { ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEach(x => { if (!x.band) x.band = x.harga < 1000 ? 'a' : x.harga < 5000 ? 'b' : 'c'; })); return r; }
 async function muat() {
@@ -343,6 +359,47 @@ document.addEventListener('click', async ev => {
   try { await navigator.clipboard.writeText(b.dataset.salin); b.textContent = 'Tersalin'; } catch (e) { b.textContent = 'Salin manual'; }
   setTimeout(() => b.textContent = t0, 1500);
 });
+
+/* Animasi: harga hitung-naik, pemindai grafik, pita harga. Semua angka dari data penutupan asli. */
+const kurangi = window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches;
+const lerp = (a, b, t) => a + (b - a) * t, ease = t => 1 - Math.pow(1 - t, 3);
+function tickerIsi(r) {
+  const all = [].concat(r.beli || [], r.naik || [], r.jual || []).filter((x, i, a) => a.findIndex(y => y.k === x.k) === i);
+  const el = $('#tick'); if (!all.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const h = all.map(x => { const c = x.chg || 0; return '<span><b>' + esc(x.k) + '</b> ' + Math.round(x.harga).toLocaleString('id-ID') + ' <i class="' + (c >= 0 ? 'u' : 'd') + '" style="font-style:normal">' + (c >= 0 ? '▲' : '▼') + ' ' + Math.abs(c).toFixed(1).replace('.', ',') + '%</i></span>'; }).join('');
+  $('#trk').innerHTML = h + '<span style="opacity:.6">Data penutupan ' + esc(r.tgl || '') + '</span>';
+}
+function hitungHarga() {
+  document.querySelectorAll('.hg').forEach(el => {
+    const to = Number(el.dataset.to), from = Number(el.dataset.from); if (!(to > 0) || kurangi) return;
+    el.classList.add(to >= from ? 'up' : 'dn');
+    const t0 = performance.now(), dur = 900;
+    (function f(now) { const t = Math.min(1, (now - t0) / dur); el.textContent = rp(lerp(from, to, ease(t))); if (t < 1) requestAnimationFrame(f); else el.textContent = rp(to); })(t0);
+  });
+}
+let pindai = 0;
+function pindaiGrafik() {
+  if (kurangi) return;
+  const id = ++pindai;
+  document.querySelectorAll('.sw').forEach((w, k) => {
+    const v = w.dataset.v.split(',').map(Number), lo = Number(w.dataset.lo), rg = Number(w.dataset.rg) || 1, n = v.length;
+    const tip = w.querySelector('.tip'), mk = w.querySelector('.mk'), svg = w.querySelector('svg'); if (n < 3 || !svg) return;
+    const W = 300, H = 84, px = 4, py = 8;
+    const t0 = performance.now() + 700 + k * 80, dur = 1300;
+    (function f(now) {
+      if (id !== pindai) return;
+      if (now < t0) return requestAnimationFrame(f);
+      const t = Math.min(1, (now - t0) / dur), pos = ease(t) * (n - 1), i = Math.floor(pos), fr = pos - i, val = i >= n - 1 ? v[n - 1] : lerp(v[i], v[i + 1], fr);
+      const x = (px + pos * (W - 2 * px) / (n - 1)) / W * 100, y = (H - py - (val - lo) / rg * (H - 2 * py)) / H * svg.clientHeight;
+      w.classList.add('on'); mk.style.left = x + '%'; mk.style.top = y + 'px'; tip.style.left = x + '%'; tip.style.top = y + 'px';
+      tip.textContent = Math.round(val).toLocaleString('id-ID');
+      if (t < 1) requestAnimationFrame(f); else setTimeout(() => { if (id === pindai) w.classList.remove('on'); }, 900);
+    })(performance.now());
+  });
+}
+function animasi() { hitungHarga(); pindaiGrafik(); }
+setInterval(() => { if (!document.hidden && !$('#vIsi').hidden && !kurangi) pindaiGrafik(); }, 9000);
 </script>
 </body>
 </html>
