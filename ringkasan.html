@@ -419,14 +419,13 @@ function kartuLive(x, lama) {
   if (hg) hitungEl(hg, lama, x.harga);
   if (pil) { pil.className = 'pill ' + (chg >= 0 ? 'up' : 'dn'); pil.textContent = (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%'; }
   const sw = it.querySelector('.sw');
-  if (sw) { const tmp = document.createElement('div'); tmp.innerHTML = spark(x); const baru = tmp.querySelector('.sw'); if (baru) { sw.replaceWith(baru); pindaiGrafik(); } }
+  if (sw) { const tmp = document.createElement('div'); tmp.innerHTML = spark(x); const baru = tmp.querySelector('.sw'); if (baru) { const cap = sw.nextElementSibling, capBaru = tmp.querySelector('.sub'); if (cap && cap.classList.contains('sub') && capBaru) cap.innerHTML = capBaru.innerHTML; sw.replaceWith(baru); pindaiGrafik(); } }
 }
 function terapkanLive(j) {
   const r = data && data.ringkasan; if (!r || !j) return;
   const semua = [].concat(r.beli || [], r.naik || [], r.jual || []), cocok = semua.filter(x => j.h && j.h[x.k] && j.h[x.k].p > 0).length;
-  if (!cocok) { statusLive('Google Finance belum mengirim harga berjalan (cek ' + (j.cek || '-') + ' WIB, kode server ' + (j.ver || 'lama') + ')' + (j.dbg ? ' [' + j.dbg + ']' : '') + '. Mencoba lagi otomatis.', false); return; }
-  const bar = $('#liveBar'); bar.hidden = false; bar.classList.toggle('on', !!j.buka);
-  $('#liveTx').textContent = j.buka ? 'Harga berjalan · tertunda ±15–20 menit (Google Finance) · terakhir cek ' + (j.cek || '') + ' WIB' : 'Pasar tutup · menampilkan harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : '');
+  if (!cocok) { statusLive('Harga berjalan belum tersedia (cek ' + (j.cek || '-') + ' WIB, server ' + (j.ver || 'lama') + ')' + (j.dbg ? ' [' + j.dbg + ']' : '') + ' · server mengirim ' + (j.n == null ? '?' : j.n) + ' harga · daftar halaman: ' + semua.slice(0, 3).map(x => x.k).join(', ') + '. Mencoba lagi otomatis.', false); return; }
+  statusLive(j.buka ? 'Harga berjalan · tertunda ±15–20 menit (Google Finance) · ' + cocok + '/' + semua.length + ' saham · data terbaru ' + ((j.t || '').slice(11) || '-') + ' WIB' + (j.segar ? ' · memperbarui…' : '') : 'Pasar tutup · harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : ''), !!j.buka);
   let ubah = false;
   ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEach(x => {
     const L = j.h && j.h[x.k]; if (!L || !(L.p > 0)) return;
@@ -434,21 +433,25 @@ function terapkanLive(j) {
     const lama = x.harga; x.harga = L.p;
     if (L.prev > 0) x.chg = Math.round((L.p - L.prev) / L.prev * 10000) / 100;
     if (x.sp && x.sp.length) {
-      if (x._app || (L.t || '').slice(0, 10) === r.tgl) x.sp[x.sp.length - 1] = L.p; else { x.sp.push(L.p); x._app = true; }
+      if (x._app || (L.tg || '') === r.tgl) x.sp[x.sp.length - 1] = L.p; else { x.sp.push(L.p); x._app = true; }
     }
     const pertama = !x._live; x._live = 1; ubah = true;
     if (Math.round(lama) !== Math.round(L.p) || pertama) kartuLive(x, lama);
   }));
   if (ubah) tickerIsi(r);
+  if (j.rt) { if (data._rt == null) data._rt = j.rt; else if (j.rt !== data._rt) { data._rt = j.rt; muat(); } }
 }
 function statusLive(teks, on) { const bar = $('#liveBar'); if (!bar) return; bar.hidden = false; bar.classList.toggle('on', !!on); $('#liveTx').textContent = teks; }
+let sedangLive = false;
 async function tarikLive() {
-  if (!data || $('#vIsi').hidden || document.hidden) return;
+  if (!data || $('#vIsi').hidden || document.hidden || sedangLive) return;
+  sedangLive = true;
+  if (!$('#liveBar').classList.contains('on')) statusLive('Memperbarui harga dari Google Finance…', true);
   try { terapkanLive(await api('hargaLive')); }
   catch (e) {
     if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) return keluarLokal(e.message);
     statusLive(/Hanya admin|tidak dikenal/i.test(e.message) ? 'Harga berjalan belum aktif: Apps Script belum diperbarui (Deploy > Kelola deployment > Versi baru).' : 'Harga berjalan gagal dimuat: ' + e.message, false);
-  }
+  } finally { sedangLive = false; }
 }
 setInterval(tarikLive, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tarikLive(); });
