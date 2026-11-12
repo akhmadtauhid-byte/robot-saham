@@ -6,51 +6,62 @@
 <meta name="robots" content="noindex">
 <title>Ringkasan Sinyal Saham IDX</title>
 <style>
-:root{--bg:#f6f6f4;--card:#fff;--ink:#101010;--ink2:#55544f;--muted:#8a8984;--line:#e3e2dd;--acc:#1f6feb;--good:#0f8a5f;--goodbg:#e4f5ed;--warn:#a86400;--warnbg:#fff3dc;--bad:#c2332b;--badbg:#fdeaea}
-@media (prefers-color-scheme:dark){:root{--bg:#0b0b0c;--card:#151517;--ink:#f2f2f0;--ink2:#c4c3bc;--muted:#8a8981;--line:#27272b;--acc:#5aa2ff;--good:#2fd39a;--goodbg:#0e2a1f;--warn:#ffb84d;--warnbg:#2c2209;--bad:#ff7a70;--badbg:#2c1210}}
+:root{--bg:#f2f5fb;--card:#fff;--ink:#0f172a;--ink2:#475569;--muted:#94a3b8;--line:#e2e8f0;--acc:#2563eb;
+--beli:#10b981;--belibg:#d1fae5;--naik:#2563eb;--naikbg:#dbeafe;--jual:#ef4444;--jualbg:#fee2e2;--warn:#b45309;--warnbg:#fef3c7}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1020;--card:#141b2f;--ink:#f1f5f9;--ink2:#cbd5e1;--muted:#64748b;--line:#243049;--acc:#60a5fa;
+--beli:#34d399;--belibg:#0b3a2c;--naik:#60a5fa;--naikbg:#14305c;--jual:#f87171;--jualbg:#4a1717;--warn:#fbbf24;--warnbg:#3b2a07}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
-.wrap{max-width:560px;margin:0 auto;padding:14px 14px calc(30px + env(safe-area-inset-bottom))}
-h1{font-size:19px;margin:6px 0 2px}
-.sub{color:var(--ink2);font-size:13px;margin:0 0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.hero{background:linear-gradient(135deg,#1d4ed8,#7c3aed 60%,#db2777);color:#fff;padding:20px 16px 56px}
+.hero .in{max-width:560px;margin:0 auto}
+.hero h1{font-size:21px;margin:0 0 3px}.hero p{margin:0;font-size:13px;opacity:.9}
+.wrap{max-width:560px;margin:-40px auto 0;padding:0 14px calc(30px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(15,23,42,.06)}
 label{display:block;font-size:13px;color:var(--ink2);margin-bottom:10px}
-input{width:100%;margin-top:4px;padding:11px 12px;font-size:16px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+input{width:100%;margin-top:4px;padding:11px 12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 button{font:inherit;cursor:pointer}
-.btn{width:100%;padding:12px;border:0;border-radius:8px;background:var(--acc);color:#fff;font-weight:600;font-size:15px}
+.btn{width:100%;padding:12px;border:0;border-radius:10px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-weight:600;font-size:15px}
 .btn:disabled{opacity:.6}
 .link{background:none;border:0;color:var(--acc);padding:4px 0;font-size:13px}
-.err{color:var(--bad);font-size:13px;min-height:18px;margin:6px 0 0}
-.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink2)}
-.chip.warn{background:var(--warnbg);color:var(--warn);border-color:transparent}
-.mkt{padding:10px 12px;border-radius:10px;font-size:13px;margin-bottom:12px}
-.mkt.sehat{background:var(--goodbg);color:var(--good)}.mkt.campuran{background:var(--warnbg);color:var(--warn)}.mkt.lemah{background:var(--badbg);color:var(--bad)}
-.tabs{display:flex;gap:6px;margin-bottom:12px}
-.tab{flex:1;padding:9px 4px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink2);font-size:13px;line-height:1.2}
-.tab b{display:block;font-size:17px;color:var(--ink)}
-.tab.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
-.item{padding:12px 0;border-top:1px solid var(--line)}.item:first-child{border-top:0;padding-top:0}
-.row1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.kode{font-weight:700;font-size:17px;letter-spacing:.3px}
-.harga{font-variant-numeric:tabular-nums}
-.pos{color:var(--good)}.neg{color:var(--bad)}
-.badge{font-size:11px;padding:1px 7px;border-radius:999px;margin-left:6px;vertical-align:2px}
-.badge.kuat{background:var(--goodbg);color:var(--good)}.badge.biasa,.badge.pantau{background:var(--warnbg);color:var(--warn)}.badge.tinggi{background:var(--badbg);color:var(--bad)}
-.lv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0 4px}
-.lv div{background:var(--bg);border-radius:8px;padding:6px 8px;font-size:12px;color:var(--muted)}
-.lv b{display:block;font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+.err{color:var(--jual);font-size:13px;min-height:18px;margin:6px 0 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.chip{display:inline-block;font-size:12px;padding:2px 10px;border-radius:999px;background:var(--naikbg);color:var(--naik)}
+.chip.warn{background:var(--warnbg);color:var(--warn)}
+.mkt{padding:10px 12px;border-radius:12px;font-size:13px;margin-bottom:12px;font-weight:600}
+.mkt.sehat{background:var(--belibg);color:var(--beli)}.mkt.campuran{background:var(--warnbg);color:var(--warn)}.mkt.lemah{background:var(--jualbg);color:var(--jual)}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tab{flex:1;padding:10px 4px;border:2px solid transparent;border-radius:14px;color:#fff;font-size:12.5px;line-height:1.2;opacity:.55;transition:.15s}
+.tab b{display:block;font-size:22px}
+.tab[data-t=beli]{background:linear-gradient(135deg,#10b981,#059669)}.tab[data-t=naik]{background:linear-gradient(135deg,#3b82f6,#2563eb)}.tab[data-t=jual]{background:linear-gradient(135deg,#f87171,#dc2626)}
+.tab.on{opacity:1;transform:translateY(-2px);box-shadow:0 6px 14px rgba(15,23,42,.2)}
+.bands{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.bd{flex:none;padding:6px 11px;white-space:nowrap;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink2);font-size:13px}
+.bd.on{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.item{padding:12px 0 14px;border-top:1px solid var(--line)}.item:first-child{border-top:0;padding-top:0}
+.row1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.kode{font-weight:800;font-size:18px;letter-spacing:.3px}
+.harga{font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;margin-left:4px}
+.pill.up{background:var(--belibg);color:var(--beli)}.pill.dn{background:var(--jualbg);color:var(--jual)}
+.badge{white-space:nowrap;font-size:11px;padding:2px 8px;border-radius:999px;margin-left:6px;vertical-align:3px;font-weight:600}
+.badge.kuat{background:var(--belibg);color:var(--beli)}.badge.biasa,.badge.pantau{background:var(--warnbg);color:var(--warn)}.badge.tinggi{background:var(--jualbg);color:var(--jual)}
+.band{white-space:nowrap;font-size:11px;color:var(--muted);margin-left:6px;font-weight:500}
+.spark{width:100%;height:84px;display:block;margin:6px 0 2px}
+.lv{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 4px}
+.lv div{border-radius:10px;padding:6px 8px;font-size:11.5px}
+.lv b{display:block;font-size:14px;font-variant-numeric:tabular-nums}
+.lv .m{background:var(--naikbg);color:var(--naik)}.lv .s{background:var(--jualbg);color:var(--jual)}.lv .t{background:var(--belibg);color:var(--beli)}
 ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .cat{font-size:12px;color:var(--warn);margin-top:4px}
-.kosong{color:var(--muted);text-align:center;padding:18px 0;font-size:14px}
+.kosong{color:var(--muted);text-align:center;padding:22px 0;font-size:14px}
+.sub{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
 .disc{font-size:12px;color:var(--muted);line-height:1.5}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
+<div class="hero"><div class="in"><h1>Ringkasan Sinyal Saham IDX</h1><p>Potensi beli, potensi naik, dan potensi jual dari Robot Analisa Saham IDX.</p></div></div>
 <div class="wrap">
-  <h1>Ringkasan Sinyal Saham IDX</h1>
-  <p class="sub">Potensi beli, potensi naik, dan potensi jual dari Robot Analisa Saham IDX.</p>
 
   <div class="card" id="vMasuk">
     <form id="fMasuk" autocomplete="on">
@@ -63,7 +74,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
   </div>
 
   <div id="vIsi" hidden>
-    <div class="top" style="margin-bottom:10px">
+    <div class="card top" style="padding:10px 14px">
       <div><span id="uNama" style="font-weight:600"></span> <span class="chip" id="uMasa"></span></div>
       <div><button class="link" id="bMuat">Muat ulang</button> · <button class="link" id="bKeluar">Keluar</button></div>
     </div>
@@ -72,6 +83,9 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <button class="tab on" data-t="beli">Potensi beli<b id="nBeli">0</b></button>
       <button class="tab" data-t="naik">Potensi naik<b id="nNaik">0</b></button>
       <button class="tab" data-t="jual">Potensi jual<b id="nJual">0</b></button>
+    </div>
+    <div class="bands" id="bands">
+      <button class="bd on" data-b="">Semua harga</button><button class="bd" data-b="a">&lt; 1.000</button><button class="bd" data-b="b">1.000 - 5.000</button><button class="bd" data-b="c">&gt; 5.000</button>
     </div>
     <div class="card" id="daftar"></div>
     <p class="sub" id="stamp"></p>
@@ -86,7 +100,7 @@ const KUNCI = 'ringkasan_token';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rp = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
-let token = '', data = null, tab = 'beli';
+let token = '', data = null, tab = 'beli', band = '';
 try { token = localStorage.getItem(KUNCI) || ''; } catch (e) {}
 
 async function api(aksi, body) {
@@ -116,23 +130,41 @@ function render() {
   const c = $('#uMasa'); c.textContent = m.t; c.className = 'chip' + (m.warn ? ' warn' : '');
   const p = $('#pasar');
   if (r.pasar) { p.hidden = false; p.className = 'mkt ' + r.pasar.level; p.textContent = 'Kondisi pasar: ' + r.pasar.teks; } else p.hidden = true;
-  $('#nBeli').textContent = r.beli.length; $('#nNaik').textContent = r.naik.length; $('#nJual').textContent = r.jual.length;
+  const hit = k => (r[k] || []).filter(x => !band || x.band === band).length;
+  $('#nBeli').textContent = hit('beli'); $('#nNaik').textContent = hit('naik'); $('#nJual').textContent = hit('jual');
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
-  const arr = r[tab] || [];
-  const judulKosong = {beli: 'Belum ada saham yang memenuhi syarat potensi beli hari ini.', naik: 'Belum ada saham dengan potensi naik yang kuat.', jual: 'Tidak ada saham dengan tanda turun tajam.'};
+  document.querySelectorAll('.bd').forEach(b => b.classList.toggle('on', b.dataset.b === band));
+  const arr = (r[tab] || []).filter(x => !band || x.band === band);
+  const judulKosong = {beli: 'Belum ada saham yang memenuhi syarat potensi beli di kelompok harga ini.', naik: 'Belum ada saham dengan potensi naik yang kuat.', jual: 'Tidak ada saham dengan tanda turun tajam.'};
   $('#daftar').innerHTML = arr.length ? arr.map(x => item(x)).join('') : '<div class="kosong">' + judulKosong[tab] + '</div>';
   $('#stamp').textContent = 'Data penutupan: ' + (r.tgl || '-') + ' · dipindai ' + r.dipindai + ' saham · diperbarui ' + tglIndo(data.diperbarui) + ' WIB';
 }
+function spark(x) {
+  const v = x.sp || []; if (v.length < 3) return '';
+  const col = tab === 'beli' ? '#10b981' : tab === 'naik' ? '#3b82f6' : '#ef4444';
+  const lv = tab === 'beli' ? [[x.stop, '#ef4444'], [x.target, '#10b981']] : [];
+  let lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
+  lv.forEach(l => { if (l[0] > 0) { lo = Math.min(lo, l[0]); hi = Math.max(hi, l[0]); } });
+  const W = 300, H = 84, px = 4, py = 8, rg = (hi - lo) || 1;
+  const X = i => px + i * (W - 2 * px) / (v.length - 1), Y = y => H - py - (y - lo) / rg * (H - 2 * py);
+  const pts = v.map((y, i) => X(i).toFixed(1) + ',' + Y(y).toFixed(1));
+  const id = 'g' + Math.random().toString(36).slice(2, 8);
+  const lines = lv.filter(l => l[0] > 0).map(l => '<line x1="0" x2="' + W + '" y1="' + Y(l[0]).toFixed(1) + '" y2="' + Y(l[0]).toFixed(1) + '" stroke="' + l[1] + '" stroke-width="1" stroke-dasharray="4 3" opacity=".7"/>').join('');
+  const ex = X(v.length - 1), ey = Y(v[v.length - 1]);
+  return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Grafik harga 30 hari terakhir ' + esc(x.k) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + col + '" stop-opacity=".35"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></linearGradient></defs>' +
+    lines + '<polygon fill="url(#' + id + ')" points="' + px + ',' + H + ' ' + pts.join(' ') + ' ' + (W - px) + ',' + H + '"/><polyline fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="' + pts.join(' ') + '"/><circle cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/></svg>' +
+    '<div class="sub" style="margin:0 0 4px;font-size:11px">Harga penutupan ' + v.length + ' hari terakhir' + (lv.length ? ' · garis putus: batas rugi (merah) &amp; target (hijau)' : '') + '</div>';
+}
 function item(x) {
-  const chg = x.chg || 0, cls = chg >= 0 ? 'pos' : 'neg';
+  const chg = x.chg || 0, cls = chg >= 0 ? 'up' : 'dn', bn = {a: '< 1.000', b: '1.000 - 5.000', c: '> 5.000'}[x.band] || '';
   let badge = '';
   if (tab === 'beli' || tab === 'naik') badge = '<span class="badge ' + esc(x.tingkat) + '">' + (x.tingkat === 'kuat' ? 'kuat' : tab === 'naik' ? 'pantau' : 'biasa') + '</span>';
   if (tab === 'jual' && x.tinggi) badge = '<span class="badge tinggi">risiko tinggi</span>';
   let lv = '';
-  if (tab === 'beli') lv = '<div class="lv"><div>Area masuk<b>' + rp(x.masuk) + '</b></div><div>Batas rugi<b>' + rp(x.stop) + '</b></div><div>Target awal<b>' + rp(x.target) + '</b></div></div>';
+  if (tab === 'beli') lv = '<div class="lv"><div class="m">Area masuk<b>' + rp(x.masuk) + '</b></div><div class="s">Batas rugi<b>' + rp(x.stop) + '</b></div><div class="t">Target awal<b>' + rp(x.target) + '</b></div></div>';
   const al = (x.alasan || []).length ? '<ul class="al">' + x.alasan.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul>' : '';
   const cat = (x.catatan || []).length ? '<div class="cat">Catatan: ' + esc(x.catatan[0]) + '</div>' : '';
-  return '<div class="item"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '</span><span class="harga">' + rp(x.harga) + ' <span class="' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + lv + al + cat + '</div>';
+  return '<div class="item"><div class="row1"><span><span class="kode">' + esc(x.k) + '</span>' + badge + '<span class="band">' + bn + '</span></span><span class="harga">' + rp(x.harga) + ' <span class="pill ' + cls + '">' + (chg >= 0 ? '+' : '') + String(chg).replace('.', ',') + '%</span></span></div>' + spark(x) + lv + al + cat + '</div>';
 }
 async function muat() {
   $('#eIsi').textContent = '';
@@ -155,6 +187,7 @@ $('#fMasuk').addEventListener('submit', async ev => {
   b.disabled = false; b.textContent = t0;
 });
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; tab = b.dataset.t; render(); });
+$('#bands').addEventListener('click', e => { const b = e.target.closest('.bd'); if (!b) return; band = b.dataset.b; render(); });
 $('#bMuat').onclick = muat;
 $('#bKeluar').onclick = async () => { try { await api('keluar'); } catch (e) {} keluarLokal(''); };
 if (token) muat();
