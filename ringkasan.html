@@ -55,6 +55,8 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .cat{font-size:12px;color:var(--warn);margin-top:4px}
 .kosong{color:var(--muted);text-align:center;padding:22px 0;font-size:14px}
 .wa{display:block;text-align:center;text-decoration:none;padding:12px;border-radius:10px;background:#25d366;color:#052e16;font-weight:700;font-size:15px}
+.tgb{display:block;width:100%;text-align:center;text-decoration:none;padding:11px;border:0;border-radius:10px;background:#229ed9;color:#fff;font-weight:700;font-size:15px;margin-bottom:8px}
+.tgb.alt{background:var(--card);color:var(--ink2);border:1px solid var(--line);font-weight:600}
 .upg{background:linear-gradient(135deg,#fef3c7,#fde68a);color:#78350f;border-color:transparent}
 .upg b{display:block;margin-bottom:2px}
 .sub{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
@@ -92,6 +94,11 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <button class="bd on" data-b="">Semua harga</button><button class="bd" data-b="a">&lt; 1.000</button><button class="bd" data-b="b">1.000 - 5.000</button><button class="bd" data-b="c">&gt; 5.000</button>
     </div>
     <div class="card" id="daftar"></div>
+    <div class="card" id="tgCard" hidden>
+      <b>Notifikasi Telegram</b>
+      <p class="sub" id="tgInfo" style="margin:4px 0 10px"></p>
+      <div id="tgAksi"></div>
+    </div>
     <div class="card upg" id="upg"><b>Ingin akses lebih lama atau versi penuh?</b><div style="font-size:13px;margin-bottom:10px">Perpanjang paket atau minta akses semua fitur langsung ke admin.</div><a class="wa" id="waUpg" href="#" target="_blank" rel="noopener">Perpanjang / upgrade via WhatsApp</a></div>
     <p class="sub" id="stamp"></p>
     <p class="disc">Ringkasan ini dihasilkan dari aturan indikator teknikal pada data penutupan, bukan ramalan. Bukan ajakan membeli atau menjual saham. Keputusan dan risikonya ada pada Anda sendiri.</p>
@@ -128,6 +135,34 @@ function masa(a) {
   const s = a.sisa;
   return {t: s <= 0 ? 'Berakhir hari ini' : 'Sisa ' + s + ' hari (s.d. ' + a.berakhir + ')', warn: s <= 2};
 }
+let tgTimer = null;
+function tgRender(st) {
+  const c = $('#tgCard'), info = $('#tgInfo'), aksi = $('#tgAksi');
+  c.hidden = false; clearInterval(tgTimer);
+  if (!st.siap) { info.textContent = 'Notifikasi Telegram belum tersedia. Hubungi admin.'; aksi.innerHTML = ''; return; }
+  if (st.terhubung) {
+    info.textContent = 'Terhubung. Ringkasan sinyal dikirim otomatis ke Telegram Anda setiap hari bursa setelah data diperbarui.';
+    aksi.innerHTML = '<button class="tgb alt" id="tgTes">Kirim pesan tes</button><button class="tgb alt" id="tgPutus">Putuskan Telegram</button><p class="err" id="tgErr" style="color:var(--ink2)"></p>';
+    $('#tgTes').onclick = async () => { try { await api('notifTes'); $('#tgErr').textContent = 'Pesan tes terkirim. Cek Telegram Anda.'; } catch (e) { $('#tgErr').textContent = e.message; } };
+    $('#tgPutus').onclick = async () => { try { tgRender(await api('notifPutus')); } catch (e) { $('#tgErr').textContent = e.message; } };
+  } else {
+    info.textContent = 'Terima ringkasan potensi beli, naik, dan jual langsung di Telegram Anda. Gratis selama akun aktif.';
+    aksi.innerHTML = '<button class="tgb" id="tgHubung">Hubungkan Telegram</button><p class="err" id="tgErr" style="color:var(--ink2)"></p>';
+    $('#tgHubung').onclick = async () => {
+      const b = $('#tgHubung'); b.disabled = true; b.textContent = 'Menyiapkan tautan...';
+      try {
+        const j = await api('notifTaut');
+        aksi.innerHTML = '<a class="tgb" href="' + esc(j.link) + '" target="_blank" rel="noopener">1. Buka Telegram lalu tekan START</a><p class="sub" id="tgErr">2. Setelah menekan START, kembali ke halaman ini. Status akan berubah otomatis.</p>';
+        let n = 0;
+        tgTimer = setInterval(async () => {
+          if (++n > 40) { clearInterval(tgTimer); return tgRender({siap: true, terhubung: false}); }
+          try { const st = await api('notifPeriksa'); if (st.terhubung) tgRender(st); } catch (e) {}
+        }, 4000);
+      } catch (e) { b.disabled = false; b.textContent = 'Hubungkan Telegram'; $('#tgErr').textContent = e.message; }
+    };
+  }
+}
+async function muatTg() { try { tgRender(await api('notif')); } catch (e) { $('#tgCard').hidden = true; } }
 function tglIndo(iso) { return iso ? iso.replace('T', ' ').slice(0, 16) : '-'; }
 
 function render() {
@@ -179,7 +214,7 @@ async function muat() {
   $('#eIsi').textContent = '';
   try {
     data = await api('ringkasan'); lengkapi(data.ringkasan);
-    $('#vMasuk').hidden = true; $('#vIsi').hidden = false; render();
+    $('#vMasuk').hidden = true; $('#vIsi').hidden = false; render(); muatTg();
   } catch (e) {
     if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) return keluarLokal(e.message);
     $('#eIsi').textContent = e.message;
