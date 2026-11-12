@@ -1259,6 +1259,10 @@ function renderAdmin(j){
       <button class="seg" data-ad="undBaru">Buat kode baru</button>${j.undangan ? ' <button class="seg" data-ad="undTutup">Tutup pendaftaran</button>' : ''}</p>
     <p class="note" style="margin-top:0">Pengguna ${j.pengguna.length}/${j.maksPengguna} · saham unik di sistem: ${j.kodeUnik}. Bagikan kode hanya ke orang yang Anda izinkan mendaftar.</p>
     <div class="tblwrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th class="num">Saham</th><th>Login terakhir</th><th>Paket / masa aktif</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${(j.permintaan || []).length ? `<div class="card" style="margin-top:12px;padding:10px;border-color:var(--warn,#d97706)"><b>Permintaan perpanjangan (${j.permintaan.length})</b>
+      <p class="note" style="margin:4px 0">Setujui hanya setelah pembayaran dikonfirmasi. Masa aktif bertambah dari tanggal berakhir (atau dari hari ini bila sudah habis).</p>
+      ${j.permintaan.map(q => `<div class="row" style="align-items:center;margin-top:6px"><span>${esc(q.nama)} · ${esc(q.email)} · <b>${q.hari} hari</b> <span class="note">${esc(q.waktu)}</span></span>
+        <button class="seg" data-ad="reqSetuju" data-id="${esc(q.id)}">Setujui</button><button class="seg danger" data-ad="reqTolak" data-id="${esc(q.id)}">Tolak</button></div>`).join('')}</div>` : ''}
     <div class="card" style="margin-top:12px;padding:10px">
       <b>Atur paket &amp; masa aktif</b>
       <p class="note" id="pkTarget" style="margin:4px 0">Pilih pengguna dengan tombol "Atur paket" di tabel.</p>
@@ -1289,6 +1293,10 @@ $('#adminBody').addEventListener('click', async e => {
   const pesan = t => { if (st()) st().textContent = t; };
   try {
     if (a === 'muat') return muatAdmin();
+    if (a === 'reqSetuju' || a === 'reqTolak') {
+      const j = await api(a === 'reqSetuju' ? 'permintaanSetuju' : 'permintaanTolak', {id: b.dataset.id});
+      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = a === 'reqSetuju' ? 'Perpanjangan disetujui, berlaku sampai ' + j.berakhir + '.' : 'Permintaan ditolak.'; return;
+    }
     if (a === 'pilih') { adTarget = {id: b.dataset.id, em: b.dataset.em}; $('#pkTarget').textContent = 'Pengguna terpilih: ' + b.dataset.em; return; }
     if (a === 'terapkan') {
       if (!adTarget) return pesan('Pilih pengguna dulu dengan tombol "Atur paket".');
