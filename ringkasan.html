@@ -168,7 +168,7 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
       <div class="bayar" data-bayar></div>
     </div>
     <p class="sub" id="stamp"></p>
-    <p class="disc">Ringkasan ini dihasilkan dari aturan indikator teknikal pada data penutupan, bukan ramalan. Bukan ajakan membeli atau menjual saham. Keputusan dan risikonya ada pada Anda sendiri.</p>
+    <p class="disc">Ringkasan ini dihasilkan dari aturan indikator teknikal pada data penutupan, bukan ramalan. Harga berjalan bersumber dari data pasar yang tertunda beberapa menit. Bukan ajakan membeli atau menjual saham. Keputusan dan risikonya ada pada Anda sendiri.</p>
   </div>
   <p class="err" id="eIsi"></p>
 </div>
@@ -272,7 +272,7 @@ function spark(x) {
   const wrapA = '<div class="sw" data-v="' + v.join(',') + '" data-lo="' + lo + '" data-rg="' + rg + '"><span class="tip"></span><span class="mk"></span>', wrapB = '</div>';
   return wrapA + '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Grafik harga 30 hari terakhir ' + esc(x.k) + '"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + col + '" stop-opacity=".35"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></linearGradient></defs>' +
     lines + '<polygon fill="url(#' + id + ')" points="' + px + ',' + H + ' ' + pts.join(' ') + ' ' + (W - px) + ',' + H + '"/><polyline fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="' + pts.join(' ') + '"/><circle class="ring" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/><circle class="dot" cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="3.5" fill="' + col + '"/></svg>' + wrapB +
-    '<div class="sub" style="margin:0 0 4px;font-size:11px">' + (x._live ? 'Harga ' + v.length + ' hari terakhir (titik akhir = harga berjalan, tertunda)' : 'Harga penutupan ' + v.length + ' hari terakhir') + (lv.length ? ' · garis putus: batas rugi (merah) &amp; target (hijau)' : '') + '</div>';
+    '<div class="sub" style="margin:0 0 4px;font-size:11px">' + (x._live ? 'Harga ' + v.length + ' hari terakhir (titik akhir = harga terkini)' : 'Harga penutupan ' + v.length + ' hari terakhir') + (lv.length ? ' · garis putus: batas rugi (merah) &amp; target (hijau)' : '') + '</div>';
 }
 function item(x) {
   const chg = x.chg || 0, cls = chg >= 0 ? 'up' : 'dn', bn = {a: '< 1.000', b: '1.000 - 5.000', c: '> 5.000'}[x.band] || '';
@@ -406,7 +406,7 @@ function pindaiGrafik() {
 function animasi() { hitungHarga(); pindaiGrafik(); }
 setInterval(() => { if (!document.hidden && !$('#vIsi').hidden && !kurangi) pindaiGrafik(); }, 9000);
 
-/* Harga berjalan dari GOOGLEFINANCE (tertunda), ditarik tiap 30 detik */
+/* Harga berjalan, ditarik tiap 30 detik */
 function hitungEl(el, from, to) {
   el.classList.remove('up', 'dn'); void el.offsetWidth; el.classList.add(to >= from ? 'up' : 'dn');
   if (kurangi) { el.textContent = rp(to); return; }
@@ -424,8 +424,8 @@ function kartuLive(x, lama) {
 function terapkanLive(j) {
   const r = data && data.ringkasan; if (!r || !j) return;
   const semua = [].concat(r.beli || [], r.naik || [], r.jual || []), cocok = semua.filter(x => j.h && j.h[x.k] && j.h[x.k].p > 0).length;
-  if (!cocok) { statusLive('Harga berjalan belum tersedia (cek ' + (j.cek || '-') + ' WIB, server ' + (j.ver || 'lama') + ')' + (j.dbg ? ' [' + j.dbg + ']' : '') + ' · server mengirim ' + (j.n == null ? '?' : j.n) + ' harga · daftar halaman: ' + semua.slice(0, 3).map(x => x.k).join(', ') + '. Mencoba lagi otomatis.', false); return; }
-  statusLive(j.buka ? 'Harga berjalan · tertunda ±15–20 menit (Google Finance) · ' + cocok + '/' + semua.length + ' saham · data terbaru ' + ((j.t || '').slice(11) || '-') + ' WIB' + (j.segar ? ' · memperbarui…' : '') : 'Pasar tutup · harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : ''), !!j.buka);
+  if (!cocok) { try { console.warn('harga berjalan kosong', j); } catch (e) {} statusLive('Harga berjalan belum tersedia · mencoba lagi otomatis', false); return; }
+  statusLive(j.buka ? 'Harga berjalan · ' + cocok + '/' + semua.length + ' saham · pembaruan ' + ((j.t || '').slice(11) || '-') + ' WIB' + (j.segar ? ' · memperbarui…' : '') : 'Pasar tutup · harga terakhir' + (j.t ? ' (' + j.t + ' WIB)' : ''), !!j.buka);
   let ubah = false;
   ['beli', 'naik', 'jual'].forEach(k => (r[k] || []).forEach(x => {
     const L = j.h && j.h[x.k]; if (!L || !(L.p > 0)) return;
@@ -446,11 +446,11 @@ let sedangLive = false;
 async function tarikLive() {
   if (!data || $('#vIsi').hidden || document.hidden || sedangLive) return;
   sedangLive = true;
-  if (!$('#liveBar').classList.contains('on')) statusLive('Memperbarui harga dari Google Finance…', true);
+  if (!$('#liveBar').classList.contains('on')) statusLive('Memperbarui harga…', true);
   try { terapkanLive(await api('hargaLive')); }
   catch (e) {
     if (e.data && (e.data.sesi === false || e.data.kedaluwarsa)) return keluarLokal(e.message);
-    statusLive(/Hanya admin|tidak dikenal/i.test(e.message) ? 'Harga berjalan belum aktif: Apps Script belum diperbarui (Deploy > Kelola deployment > Versi baru).' : 'Harga berjalan gagal dimuat: ' + e.message, false);
+    try { console.warn('harga berjalan gagal', e); } catch (x) {} statusLive('Harga berjalan belum tersedia · mencoba lagi otomatis', false);
   } finally { sedangLive = false; }
 }
 setInterval(tarikLive, 30000);
