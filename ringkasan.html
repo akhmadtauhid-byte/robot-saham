@@ -63,6 +63,15 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .upg>b{display:block;margin-bottom:2px}
 .sub{color:var(--ink2);font-size:12.5px;margin:0 0 10px}
 .disc{font-size:12px;color:var(--muted);line-height:1.5}
+.rp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:2px}
+.rp-h b{font-size:15px}.rp-h small{color:var(--muted);font-size:12px}
+.rp-b{border-top:1px solid var(--line);padding:11px 0 4px}
+.rp-t{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600;font-size:14px}
+.rp-g{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rp-c{background:rgba(255,255,255,.04);border-radius:12px;padding:8px 10px}
+.rp-c .v{font-size:22px;font-weight:800;line-height:1.1}.rp-c .l{font-size:11.5px;color:var(--muted);margin-top:2px}
+.rp-c .d{font-size:11.5px;margin-top:3px;font-weight:600}.d.up{color:var(--beli)}.d.dn{color:var(--jual)}.d.nt{color:var(--muted)}
+.rp-s{font-size:12px;color:var(--muted);margin:7px 0 0;line-height:1.5}
 .bayar{margin-top:12px;border-top:1px dashed rgba(245,179,1,.35);padding-top:12px}
 .login-bayar{margin-top:14px;padding:14px;border-radius:14px;background:rgba(245,179,1,.10);border:1px solid rgba(245,179,1,.4);color:#fcd34d}
 .hrg{display:flex;gap:6px;margin:8px 0 12px}
@@ -107,6 +116,24 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
 .livebar .dt{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
 .livebar.on .dt{background:var(--beli);animation:kedip 1.2s ease-in-out infinite}
 @keyframes kedip{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)}}
+.fresh{margin:-4px 2px 12px;font-size:12px;line-height:1.7;color:var(--ink2)}.fresh .chip{margin-right:6px}
+.fresh.warn{color:var(--warn)}
+.tabinfo{font-size:12.5px;color:var(--ink2);margin:-2px 2px 10px;line-height:1.45}
+details.card summary{cursor:pointer;font-weight:700;font-size:15px;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px}
+details.card summary::-webkit-details-marker{display:none}
+details.card summary::after{content:'+';font-size:20px;color:var(--acc);line-height:1}
+details.card[open] summary::after{content:'\2212'}
+.pd{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;font-size:13px;color:var(--ink2);line-height:1.55}
+.pd h4{margin:12px 0 3px;font-size:13.5px;color:var(--ink)}
+.pd p{margin:0 0 6px}
+.kal .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kal label{margin-bottom:8px}
+.kal .out{margin-top:6px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.05);font-size:13px;line-height:1.55;color:var(--ink2)}
+.kal .big{font-size:22px;font-weight:800;color:var(--ink)}
+.kal .ck{display:flex;align-items:center;gap:8px;font-size:12.5px;margin:2px 0 6px;color:var(--ink2)}
+.kal .ck input{width:auto;margin:0}
+.btnhit{margin-top:8px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(56,189,248,.1);color:var(--acc);font-size:12.5px;font-weight:600}
+.ok{color:var(--beli)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -138,11 +165,12 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
   <div id="vIsi" hidden>
     <div class="card top" style="padding:10px 14px">
       <div><span id="uNama" style="font-weight:600"></span> <span class="chip" id="uMasa"></span></div>
-      <div><button class="link" id="bMuat">Muat ulang</button> · <button class="link" id="bKeluar">Keluar</button></div>
+      <div><button class="link" id="bMuat">Muat ulang</button> · <button class="link" id="bSandi">Ubah sandi</button> · <button class="link" id="bKeluar">Keluar</button></div>
     </div>
     <div class="mkt" id="pasar" hidden></div>
     <div class="tick" id="tick" hidden><div class="trk" id="trk"></div></div>
     <div class="livebar" id="liveBar" hidden><span class="dt"></span><span id="liveTx"></span></div>
+    <div class="fresh" id="segar" hidden></div>
     <div class="tabs" id="tabs">
       <button class="tab on" data-t="beli">Potensi beli<b id="nBeli">0</b></button>
       <button class="tab" data-t="naik">Potensi naik<b id="nNaik">0</b></button>
@@ -151,7 +179,49 @@ ul.al{margin:6px 0 0;padding-left:18px;color:var(--ink2);font-size:13px}
     <div class="bands" id="bands">
       <button class="bd on" data-b="">Semua harga</button><button class="bd" data-b="a">&lt; 1.000</button><button class="bd" data-b="b">1.000 - 5.000</button><button class="bd" data-b="c">&gt; 5.000</button>
     </div>
+    <p class="tabinfo" id="tabInfo"></p>
     <div class="card" id="daftar"></div>
+    <div class="card kal" id="kal">
+      <b>Kalkulator posisi: beli berapa lot?</b>
+      <p class="sub" style="margin:4px 0 10px">Masukkan modal dan batas risiko Anda. Aplikasi menghitung jumlah lot agar rugi maksimum tetap terkendali. 1 lot = 100 lembar.</p>
+      <div class="g2">
+        <label>Modal (Rp)<input id="kModal" type="text" inputmode="numeric" placeholder="1900000"></label>
+        <label>Risiko per transaksi (%)<input id="kRisk" type="text" inputmode="decimal" value="2"></label>
+        <label>Harga masuk<input id="kMasuk" type="text" inputmode="numeric" placeholder="mis. 1560"></label>
+        <label>Batas rugi (stop)<input id="kStop" type="text" inputmode="numeric" placeholder="mis. 1440"></label>
+      </div>
+      <label class="ck"><input type="checkbox" id="kKecil"> Kecilkan posisi 50% (disarankan saat pasar lemah)</label>
+      <div class="out" id="kOut">Isi harga masuk dan batas rugi, atau tekan "Hitung lot" pada kartu saham di tab Potensi beli.</div>
+    </div>
+    <details class="card" id="panduan">
+      <summary>Cara membaca ringkasan ini</summary>
+      <div class="pd">
+        <h4>Potensi beli, naik, dan jual</h4>
+        <p><b>Potensi beli</b>: saham yang lolos aturan paling ketat (tren, skor, likuiditas, RSI tidak jenuh) dan punya rencana stop dan target. <b>Potensi naik</b>: tren naik terbentuk tetapi belum memenuhi semua syarat beli, jadi sekadar dipantau. <b>Potensi jual</b>: ada tanda melemah atau turun tajam; bagi pemilik saham itu, saatnya evaluasi.</p>
+        <h4>Kuat, biasa, pantau</h4>
+        <p>Label menunjukkan seberapa jauh saham melewati syarat. "Kuat" berarti skornya jelas di atas batas.</p>
+        <h4>Area masuk, batas rugi, target awal</h4>
+        <p><b>Area masuk</b> adalah harga acuan untuk membeli, bukan perintah. <b>Batas rugi</b> adalah harga keluar bila salah arah: jual tanpa menawar. <b>Target awal</b> berjarak dua kali jarak risiko dari harga masuk, sehingga untung yang dicari minimal dua kali rugi yang diterima.</p>
+        <h4>Kenapa "Potensi beli" kadang 0?</h4>
+        <p>Saat kondisi pasar LEMAH, syarat skor beli dinaikkan 15 poin. Tidak ada saham yang lolos itu wajar, dan menunggu juga keputusan yang sah. Daftar tidak diisi demi terlihat ramai.</p>
+        <h4>Data yang tampil</h4>
+        <p>Sinyal dihitung dari harga <b>penutupan</b> hari bursa terakhir. Harga di kartu bergerak mengikuti data pasar yang tertunda beberapa menit, jadi bisa berbeda dari aplikasi sekuritas Anda. Selalu cek harga di aplikasi sekuritas sebelum bertransaksi.</p>
+        <h4>Biaya transaksi</h4>
+        <p>Fee beli dan jual sekitar 0,15% + 0,25% (cek tarif sekuritas Anda). Untung di bawah sekitar 0,4% sebenarnya belum menutup biaya.</p>
+        <p style="color:var(--muted)">Alat bantu edukasi dari aturan indikator, bukan ajakan membeli atau menjual saham dan bukan jaminan hasil.</p>
+      </div>
+    </details>
+    <div class="card" id="rapor" hidden></div>
+    <div class="card" id="sandiCard" hidden>
+      <b>Ubah kata sandi</b>
+      <form id="fSandi" autocomplete="off" style="margin-top:10px">
+        <label>Kata sandi lama<input id="sLama" type="password" autocomplete="current-password" required></label>
+        <label>Kata sandi baru (minimal 8 karakter)<input id="sBaru" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>Ulangi kata sandi baru<input id="sUlang" type="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="btn" id="bSandiKirim" type="submit">Simpan sandi baru</button>
+        <p class="err" id="eSandi"></p>
+      </form>
+    </div>
     <div class="card" id="tgCard" hidden>
       <b>Notifikasi Telegram</b>
       <p class="sub" id="tgInfo" style="margin:4px 0 10px"></p>
@@ -254,8 +324,35 @@ function render() {
   const arr = (r[tab] || []).filter(x => !band || x.band === band);
   const judulKosong = {beli: 'Belum ada saham yang memenuhi syarat potensi beli di kelompok harga ini.', naik: 'Belum ada saham dengan potensi naik yang kuat.', jual: 'Tidak ada saham dengan tanda turun tajam.'};
   $('#daftar').innerHTML = arr.length ? arr.map(x => item(x)).join('') : '<div class="kosong">' + judulKosong[tab] + '</div>';
+  renderRapor(r.rapor);
+  segarRender(r); tabInfoRender(r, arr);
+  tambahTombolHitung(arr);
   tickerIsi(r); setTimeout(animasi, 30); if (!data._liveTarik) { data._liveTarik = 1; setTimeout(tarikLive, 1200); }
   $('#stamp').textContent = 'Data penutupan: ' + (r.tgl || '-') + ' · dipindai ' + r.dipindai + ' saham · diperbarui ' + tglIndo(data.diperbarui) + ' WIB';
+}
+function persen(x) { return x == null ? '-' : x.toLocaleString('id-ID', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%'; }
+function bertanda(x, dg) { return x == null ? '-' : (x > 0 ? '+' : '') + x.toLocaleString('id-ID', {minimumFractionDigits: dg, maximumFractionDigits: dg}); }
+function renderRapor(r) {
+  const el = $('#rapor');
+  if (!r || !r.beli || !r.dasar || !r.dasar.n) { el.hidden = true; return; }
+  const blok = (judul, o, pemb, turun) => {
+    if (!o || !o.n) return '';
+    const sel = r.hari.map((h, i) => {
+      const dl = o.benar[i] == null || pemb.benar[i] == null ? null : Math.round((o.benar[i] - pemb.benar[i]) * 10) / 10;
+      const kls = dl == null || Math.abs(dl) < 0.5 ? 'nt' : (dl > 0 ? 'up' : 'dn');
+      return '<div class="rp-c"><div class="v">' + persen(o.benar[i]) + '</div><div class="l">' + (turun ? 'turun' : 'naik') + ' setelah ' + h + ' hari bursa</div>' +
+        '<div class="d ' + kls + '">' + (dl == null ? '' : bertanda(dl, 1) + ' poin vs semua hari (' + persen(pemb.benar[i]) + ')') + '</div></div>';
+    }).join('');
+    return '<div class="rp-b"><div class="rp-t"><span>' + judul + '</span><span class="chip">' + o.n.toLocaleString('id-ID') + ' sinyal</span></div><div class="rp-g">' + sel + '</div>' +
+      '<p class="rp-s">Rata-rata hasil: ' + bertanda(o.rata[0], 2) + '% (' + r.hari[0] + ' hari) · ' + bertanda(o.rata[1], 2) + '% (' + r.hari[1] + ' hari). Semua hari: ' + bertanda(pemb.rata[0], 2) + '% · ' + bertanda(pemb.rata[1], 2) + '%.</p></div>';
+  };
+  const rc = r.beli.rencana, sedikit = Math.min(r.beli.n, r.naik.n, r.jual.n) < 30;
+  el.innerHTML = '<div class="rp-h"><b>Rapor sinyal</b><small>uji riwayat ' + esc(r.dari) + ' s/d ' + esc(r.sampai) + '</small></div>' +
+    '<p class="sub" style="margin:0 0 6px">Aturan yang sama dengan daftar di atas, diuji pada riwayat ' + r.saham + ' saham. Pembandingnya adalah semua hari tanpa memilih sinyal.</p>' +
+    blok('Potensi beli', r.beli, r.dasar, false) + blok('Potensi naik', r.naik, r.dasar, false) + blok('Potensi jual', r.jual, r.dasarTurun, true) +
+    (rc && rc.n ? '<div class="rp-b"><p class="rp-s" style="margin:0"><b style="color:var(--ink2)">Rencana potensi beli</b> (stop berbasis ATR, target 2× risiko, maksimal ' + r.hari[r.hari.length - 1] + ' hari): kena target ' + persen(rc.target) + ', kena stop ' + persen(rc.stop) + ', belum keduanya ' + persen(rc.sisa) + '. Rata-rata ' + bertanda(rc.rataR, 2) + ' kali risiko per transaksi.</p></div>' : '') +
+    '<p class="rp-s" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">Uji sederhana: masuk di harga penutupan hari sinyal, tanpa biaya transaksi, memakai daftar saham saat ini dan riwayat sekitar 1,5 tahun' + (sedikit ? ' (contoh masih sedikit, hasil belum stabil)' : '') + '. Hasil masa lalu tidak menjamin hasil ke depan.</p>';
+  el.hidden = false;
 }
 function spark(x) {
   const v = x.sp || []; if (v.length < 3) return '';
@@ -455,6 +552,93 @@ async function tarikLive() {
 }
 setInterval(tarikLive, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tarikLive(); });
+
+/* Penanda kesegaran data, keterangan tab, ubah sandi, kalkulator posisi */
+const BLN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+function tglPendek(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? Number(m[3]) + ' ' + BLN[Number(m[2]) - 1] + ' ' + m[1] : (iso || '-'); }
+// Tanggal data penutupan yang seharusnya sudah ada sekarang: hari kerja terakhir; hari ini hanya bila sudah lewat 18:00 WIB.
+function dataSeharusnya(nowMs) {
+  const w = new Date(nowMs + 7 * 3600e3), menit = w.getUTCHours() * 60 + w.getUTCMinutes();
+  const d = new Date(Date.UTC(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate()));
+  const hariKerja = x => { const g = x.getUTCDay(); return g >= 1 && g <= 5; };
+  if (!(hariKerja(d) && menit >= 18 * 60)) { do { d.setUTCDate(d.getUTCDate() - 1); } while (!hariKerja(d)); }
+  return d.toISOString().slice(0, 10);
+}
+function segarRender(r) {
+  const el = $('#segar'); if (!r || !r.tgl) { el.hidden = true; return; }
+  const seharusnya = dataSeharusnya(Date.now()), basi = r.tgl < seharusnya;
+  el.hidden = false; el.className = 'fresh' + (basi ? ' warn' : '');
+  el.innerHTML = '<span class="chip' + (basi ? ' warn' : '') + '">Data penutupan ' + esc(tglPendek(r.tgl)) + '</span><span>diperbarui ' + esc(tglIndo(data.diperbarui)) + ' WIB</span>' +
+    (basi ? '<br><span>Data hari bursa terbaru belum masuk. Bila bukan hari libur bursa, muat ulang sebentar lagi.</span>' : '<span>· harga kartu mengikuti data pasar tertunda</span>');
+}
+function tabInfoRender(r, arr) {
+  const t = {beli: 'Lolos aturan paling ketat dan punya rencana stop dan target. Ini acuan, bukan perintah beli.', naik: 'Tren naik terbentuk, tetapi belum memenuhi semua syarat beli. Cukup dipantau.', jual: 'Ada tanda melemah atau turun tajam. Bila Anda memegangnya, saatnya evaluasi.'}[tab];
+  let x = t;
+  if (tab === 'beli' && !arr.length && r.pasar && r.pasar.level === 'lemah') x += ' Pasar sedang lemah: syarat beli dinaikkan 15 poin, jadi daftar kosong itu wajar. Menunggu juga keputusan.';
+  $('#tabInfo').textContent = x;
+}
+$('#bSandi').onclick = () => { const c = $('#sandiCard'); c.hidden = !c.hidden; if (!c.hidden) { c.scrollIntoView({behavior: 'smooth', block: 'center'}); $('#sLama').focus(); } };
+$('#fSandi').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const e = $('#eSandi'), b = $('#bSandiKirim'), t0 = b.textContent; e.style.color = ''; e.textContent = '';
+  if ($('#sBaru').value.length < 8) { e.textContent = 'Kata sandi baru minimal 8 karakter.'; return; }
+  if ($('#sBaru').value !== $('#sUlang').value) { e.textContent = 'Pengulangan kata sandi baru tidak sama.'; return; }
+  if ($('#sBaru').value === $('#sLama').value) { e.textContent = 'Kata sandi baru harus berbeda dari yang lama.'; return; }
+  b.disabled = true; b.textContent = 'Menyimpan...';
+  try {
+    await api('ubahSandi', {lama: $('#sLama').value, baru: $('#sBaru').value});
+    $('#fSandi').reset(); e.style.color = 'var(--beli)'; e.textContent = 'Kata sandi berhasil diubah. Perangkat lain akan diminta masuk ulang.';
+  } catch (er) { e.textContent = er.message; }
+  b.disabled = false; b.textContent = t0;
+});
+
+/* Kalkulator posisi */
+const KAL = 'kal_pref';
+const angka = v => { v = String(v == null ? '' : v).trim().replace(/\./g, '').replace(',', '.'); const n = Number(v); return isFinite(n) ? n : NaN; };
+const desimal = v => { const n = Number(String(v == null ? '' : v).trim().replace(',', '.')); return isFinite(n) ? n : NaN; };
+const ribu = n => Math.round(n).toLocaleString('id-ID');
+function kalHitung() {
+  const modal = angka($('#kModal').value), risk = desimal($('#kRisk').value), e = angka($('#kMasuk').value), st = angka($('#kStop').value), out = $('#kOut');
+  try { localStorage.setItem(KAL, JSON.stringify({m: $('#kModal').value, r: $('#kRisk').value})); } catch (x) {}
+  if (!(modal > 0) || !(risk > 0)) { out.textContent = 'Isi modal dan risiko per transaksi (disarankan 1 sampai 2%).'; return; }
+  if (risk > 5) { out.innerHTML = '<span style="color:var(--jual)">Risiko di atas 5% per transaksi terlalu besar. Mulailah dari 1 sampai 2%.</span>'; return; }
+  if (!(e > 0) || !(st > 0)) { out.textContent = 'Isi harga masuk dan batas rugi, atau tekan "Hitung lot" pada kartu saham di tab Potensi beli.'; return; }
+  if (st >= e) { out.innerHTML = '<span style="color:var(--jual)">Batas rugi harus di bawah harga masuk.</span>'; return; }
+  const faktor = $('#kKecil').checked ? 0.5 : 1, uangRisiko = modal * risk / 100 * faktor, rugiLot = (e - st) * 100;
+  let lot = Math.floor(uangRisiko / rugiLot), terbatas = false;
+  const maksModal = Math.floor(modal / (e * 100));
+  if (lot > maksModal) { lot = maksModal; terbatas = true; }
+  if (lot < 1) {
+    out.innerHTML = maksModal < 1 ? '<span style="color:var(--jual)">Modal belum cukup untuk 1 lot (butuh sekitar Rp ' + ribu(e * 100) + ').</span>'
+      : '<span style="color:var(--warn)">1 lot sudah melebihi batas risiko Anda: rugi bila kena stop sekitar Rp ' + ribu(rugiLot) + ' (batas Rp ' + ribu(uangRisiko) + '). Lewati saham ini, atau naikkan modal atau risiko dengan hati-hati.</span>';
+    return;
+  }
+  const nilai = lot * 100 * e, rugi = lot * rugiLot, fee = nilai * 0.0015 + (nilai - rugi) * 0.0025, rugiBersih = rugi + fee;
+  const target = e + 2 * (e - st), untung = lot * 100 * (target - e), feeT = nilai * 0.0015 + lot * 100 * target * 0.0025, untungBersih = untung - feeT;
+  out.innerHTML = '<div class="big">' + lot + ' lot <span style="font-size:13px;font-weight:600;color:var(--ink2)">(' + (lot * 100) + ' lembar)</span></div>' +
+    'Nilai beli sekitar <b>Rp ' + ribu(nilai) + '</b> (' + Math.round(nilai / modal * 100) + '% dari modal)' + (terbatas ? ', dibatasi oleh modal' : '') + '.<br>' +
+    'Bila kena batas rugi: rugi sekitar <b style="color:var(--jual)">Rp ' + ribu(rugiBersih) + '</b> (' + (rugiBersih / modal * 100).toFixed(1).replace('.', ',') + '% dari modal, sudah termasuk fee).<br>' +
+    'Bila mencapai target 2× risiko (Rp ' + ribu(target) + '): untung sekitar <b class="ok">Rp ' + ribu(untungBersih) + '</b> setelah fee.<br>' +
+    '<span style="font-size:11.5px;color:var(--muted)">Perkiraan dengan fee 0,15% beli dan 0,25% jual; sesuaikan dengan sekuritas Anda. Bukan saran investasi.</span>';
+}
+['kModal', 'kRisk', 'kMasuk', 'kStop'].forEach(i => $('#' + i).addEventListener('input', kalHitung));
+$('#kKecil').addEventListener('change', kalHitung);
+try { const k = JSON.parse(localStorage.getItem(KAL) || 'null'); if (k) { if (k.m) $('#kModal').value = k.m; if (k.r) $('#kRisk').value = k.r; } } catch (e) {}
+function tambahTombolHitung(arr) {
+  if (tab !== 'beli') return;
+  document.querySelectorAll('#daftar .item').forEach(it => {
+    if (it.querySelector('.btnhit')) return;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btnhit'; b.dataset.k = it.dataset.k; b.textContent = 'Hitung lot untuk ' + it.dataset.k;
+    it.appendChild(b);
+  });
+}
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('.btnhit'); if (!b || !data) return;
+  const x = (data.ringkasan.beli || []).find(y => y.k === b.dataset.k); if (!x) return;
+  $('#kMasuk').value = Math.round(x.masuk); $('#kStop').value = Math.round(x.stop);
+  const pasar = data.ringkasan.pasar; $('#kKecil').checked = !!(pasar && pasar.level === 'lemah');
+  kalHitung(); $('#kal').scrollIntoView({behavior: 'smooth', block: 'start'});
+});
 </script>
 </body>
 </html>
