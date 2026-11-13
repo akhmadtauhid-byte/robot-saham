@@ -230,6 +230,7 @@ details.card[open] summary::after{content:'\2212'}
     <div class="card upg" id="upg">
       <b>Perpanjang masa aktif</b>
       <div style="font-size:13px;margin-bottom:10px">Pilih durasi, lalu ajukan. Permintaan Anda langsung masuk ke admin.</div>
+      <ul class="al" style="margin:0 0 10px;font-size:12.5px"><li>Alarm Telegram langsung saat ada Potensi beli baru, lengkap dengan area masuk, batas rugi, dan target</li><li>Rapor sinyal dan kalkulator lot tanpa batas</li></ul>
       <div class="durs" id="durs"><button class="dur" data-h="3">3 hari<br><small>Rp15.000</small></button><button class="dur on" data-h="7">7 hari<br><small>Rp25.000</small></button><button class="dur" data-h="30">30 hari<br><small>Rp65.000</small></button></div>
       <button class="wa" id="bAjukan" style="width:100%;border:0">Ajukan perpanjangan</button>
       <p class="sub" id="reqInfo" style="margin:10px 0 0;color:#fcd34d"></p>
@@ -279,7 +280,7 @@ function tgRender(st) {
   c.hidden = false; clearInterval(tgTimer);
   if (!st.siap) { info.textContent = 'Notifikasi Telegram belum tersedia. Hubungi admin.'; aksi.innerHTML = ''; return; }
   if (st.terhubung) {
-    info.textContent = 'Terhubung. Ringkasan sinyal dikirim otomatis ke Telegram Anda setiap hari bursa setelah data diperbarui.';
+    info.textContent = 'Terhubung. Ringkasan sinyal dikirim otomatis ke Telegram Anda setiap hari bursa setelah data diperbarui.' + (st.alarm ? ' Alarm potensi beli aktif: Anda diberi tahu langsung saat ada saham baru masuk daftar Potensi beli.' : ' Alarm potensi beli langsung hanya untuk pelanggan berbayar; akun gratis menerima ringkasan harian.');
     aksi.innerHTML = '<button class="tgb alt" id="tgTes">Kirim pesan tes</button><button class="tgb alt" id="tgPutus">Putuskan Telegram</button><p class="err" id="tgErr" style="color:var(--ink2)"></p>';
     $('#tgTes').onclick = async () => { try { await api('notifTes'); $('#tgErr').textContent = 'Pesan tes terkirim. Cek Telegram Anda.'; } catch (e) { $('#tgErr').textContent = e.message; } };
     $('#tgPutus').onclick = async () => { try { tgRender(await api('notifPutus')); } catch (e) { $('#tgErr').textContent = e.message; } };
