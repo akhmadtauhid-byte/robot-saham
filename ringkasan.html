@@ -570,7 +570,8 @@ function segarRender(r) {
   const seharusnya = dataSeharusnya(Date.now()), basi = r.tgl < seharusnya;
   el.hidden = false; el.className = 'fresh' + (basi ? ' warn' : '');
   el.innerHTML = '<span class="chip' + (basi ? ' warn' : '') + '">Data penutupan ' + esc(tglPendek(r.tgl)) + '</span><span>diperbarui ' + esc(tglIndo(data.diperbarui)) + ' WIB</span>' +
-    (basi ? '<br><span>Data hari bursa terbaru belum masuk. Bila bukan hari libur bursa, muat ulang sebentar lagi.</span>' : '<span>· harga kartu mengikuti data pasar tertunda</span>');
+    (basi ? '<br><span>Data hari bursa terbaru belum masuk. Bila bukan hari libur bursa, muat ulang sebentar lagi.</span>' : '<span>· harga kartu mengikuti data pasar tertunda</span>') +
+    (r.kualitas && r.kualitas.jumlah ? '<br><span>' + r.kualitas.jumlah + ' saham dikecualikan sementara karena datanya meragukan (misalnya pemecahan saham), supaya tidak ada sinyal palsu.</span>' : '');
 }
 function tabInfoRender(r, arr) {
   const t = {beli: 'Lolos aturan paling ketat dan punya rencana stop dan target. Ini acuan, bukan perintah beli.', naik: 'Tren naik terbentuk, tetapi belum memenuhi semua syarat beli. Cukup dipantau.', jual: 'Ada tanda melemah atau turun tajam. Bila Anda memegangnya, saatnya evaluasi.'}[tab];
