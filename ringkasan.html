@@ -31,6 +31,9 @@ button{font:inherit;cursor:pointer}
 .tab{flex:1;padding:10px 4px;border:2px solid transparent;border-radius:14px;color:#fff;font-size:12.5px;line-height:1.2;opacity:.55;transition:.15s}
 .tab b{display:block;font-size:22px}
 .tab[data-t=beli]{background:linear-gradient(135deg,#16a34a,#15803d)}.tab[data-t=naik]{background:linear-gradient(135deg,#3b82f6,#2563eb)}.tab[data-t=jual]{background:linear-gradient(135deg,#f87171,#dc2626)}
+.tab[data-t=gain]{background:linear-gradient(135deg,#f59e0b,#d97706)}
+.sub2{display:flex;gap:6px;margin-bottom:10px}.sb{flex:1;padding:8px 4px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink2);font-size:12.5px;font-weight:600}.sb.on{background:var(--warnbg);color:var(--warn);border-color:var(--warn)}
+.gwarn{font-size:12px;color:var(--warn);background:var(--warnbg);border-radius:10px;padding:8px 10px;margin-bottom:10px;line-height:1.5}
 .tab.on{opacity:1;transform:translateY(-2px);box-shadow:0 6px 14px rgba(15,23,42,.2)}
 .bands{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .bd{flex:none;padding:6px 11px;white-space:nowrap;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink2);font-size:13px}
@@ -178,6 +181,10 @@ details.card[open] summary::after{content:'\2212'}
       <button class="tab on" data-t="beli">Potensi beli<b id="nBeli">0</b></button>
       <button class="tab" data-t="naik">Potensi naik<b id="nNaik">0</b></button>
       <button class="tab" data-t="jual">Potensi jual<b id="nJual">0</b></button>
+      <button class="tab" data-t="gain">Top Gainer<b id="nGain">0</b></button>
+    </div>
+    <div class="sub2" id="subG" hidden>
+      <button class="sb on" data-s="swing">Swing</button><button class="sb" data-s="harian">Kandidat besok</button><button class="sb" data-s="hindari">Hindari</button>
     </div>
     <div class="bands" id="bands">
       <button class="bd on" data-b="">Semua harga</button><button class="bd" data-b="a">&lt; 1.000</button><button class="bd" data-b="b">1.000 - 5.000</button><button class="bd" data-b="c">&gt; 5.000</button>
@@ -207,6 +214,8 @@ details.card[open] summary::after{content:'\2212'}
         <p><b>Area masuk</b> adalah harga acuan untuk membeli, bukan perintah. <b>Batas rugi</b> adalah harga keluar bila salah arah: jual tanpa menawar. <b>Target awal</b> berjarak dua kali jarak risiko dari harga masuk, sehingga untung yang dicari minimal dua kali rugi yang diterima.</p>
         <h4>Kenapa "Potensi beli" kadang 0?</h4>
         <p>Saat kondisi pasar LEMAH, syarat skor beli dinaikkan 15 poin. Tidak ada saham yang lolos itu wajar, dan menunggu juga keputusan yang sah. Daftar tidak diisi demi terlihat ramai.</p>
+        <h4>Tab Top Gainer</h4>
+        <p>Berisi saham yang naik hari ini, dipilah menjadi tiga. <b>Swing</b>: naik kuat dengan dukungan volume, cocok ditahan beberapa hari dengan batas rugi dan target. <b>Kandidat besok</b>: naik tajam dengan volume besar, hanya untuk dipantau besok pagi dengan modal kecil dan batas rugi dekat. Datanya harian, jadi ini bukan sinyal masuk dan keluar per menit. <b>Hindari</b>: naik tanpa volume atau nilai transaksinya kecil, ciri saham yang mudah digoreng. Daftar hanya dari saham di daftar pasar sistem, bukan seluruh bursa.</p>
         <h4>Data yang tampil</h4>
         <p>Sinyal dihitung dari harga <b>penutupan</b> hari bursa terakhir. Harga di kartu bergerak mengikuti data pasar yang tertunda beberapa menit, jadi bisa berbeda dari aplikasi sekuritas Anda. Selalu cek harga di aplikasi sekuritas sebelum bertransaksi.</p>
         <h4>Biaya transaksi</h4>
@@ -256,7 +265,7 @@ const rp = n => 'Rp ' + Math.round(n).toLocaleString('id-ID');
 const WA = '628811466979';
 const waLink = t => 'https://wa.me/' + WA + '?text=' + encodeURIComponent(t);
 let durasi = 7;
-let token = '', data = null, tab = 'beli', band = '';
+let token = '', data = null, tab = 'beli', band = '', subG = 'swing';
 try { token = localStorage.getItem(KUNCI) || ''; } catch (e) {}
 
 async function api(aksi, body) {
@@ -323,11 +332,17 @@ function render() {
   if (r.pasar) { p.hidden = false; p.className = 'mkt ' + r.pasar.level; p.textContent = 'Kondisi pasar: ' + r.pasar.teks; } else p.hidden = true;
   const hit = k => (r[k] || []).filter(x => !band || x.band === band).length;
   $('#nBeli').textContent = hit('beli'); $('#nNaik').textContent = hit('naik'); $('#nJual').textContent = hit('jual');
+  const G = r.gainer || null, gt = G ? ((G.swing || []).length + (G.harian || []).length + (G.hindari || []).length) : 0;
+  $('#nGain').textContent = gt;
+  const modeG = tab === 'gain';
+  $('#subG').hidden = !modeG; $('#bands').hidden = modeG;
+  document.querySelectorAll('.sb').forEach(b => b.classList.toggle('on', b.dataset.s === subG));
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
   document.querySelectorAll('.bd').forEach(b => b.classList.toggle('on', b.dataset.b === band));
-  const arr = (r[tab] || []).filter(x => !band || x.band === band);
+  const arr = modeG ? ((G && G[subG]) || []) : (r[tab] || []).filter(x => !band || x.band === band);
   const judulKosong = {beli: 'Belum ada saham yang memenuhi syarat potensi beli di kelompok harga ini.', naik: 'Belum ada saham dengan potensi naik yang kuat.', jual: 'Tidak ada saham dengan tanda turun tajam.'};
-  $('#daftar').innerHTML = arr.length ? arr.map(x => item(x)).join('') : '<div class="kosong">' + judulKosong[tab] + '</div>';
+  judulKosong.gain = {swing: 'Belum ada saham naik yang memenuhi syarat swing hari ini.', harian: 'Belum ada kandidat harian: tidak ada saham likuid yang naik tajam dengan volume besar.', hindari: 'Tidak ada saham naik yang mencurigakan hari ini.'}[subG];
+  $('#daftar').innerHTML = (modeG ? gainHead() : '') + (arr.length ? arr.map(x => item(x)).join('') : '<div class="kosong">' + judulKosong[tab] + '</div>');
   renderRapor(r.rapor);
   segarRender(r); tabInfoRender(r, arr);
   tambahTombolHitung(arr);
@@ -388,13 +403,37 @@ function indikator(x) {
   }
   return '<div class="ind">' + r + m + '</div>';
 }
+function gainHead() {
+  const G = data.ringkasan.gainer || {};
+  const t = {
+    swing: 'Naik kuat hari ini dengan dukungan volume, ditutup dekat harga tertinggi, dan momentum belum panas. Cocok ditahan beberapa hari dengan batas rugi dan target. Area masuk memakai harga penutupan; cek harga berjalan sebelum order.',
+    harian: 'Naik tajam dengan volume besar. Ini KANDIDAT untuk dipantau besok pagi, bukan sinyal masuk dan keluar per menit: data di sini harian, bukan per menit. Risiko berbalik arah tinggi, pakai batas rugi dekat dan modal kecil.',
+    hindari: 'Naik tinggi tetapi nilai transaksi kecil atau tanpa dukungan volume. Ciri saham yang mudah digoreng dan sering berbalik cepat.'
+  }[subG];
+  const tot = G.total ? ' Dipilih dari ' + (G.total[subG] || 0) + ' saham yang memenuhi syarat di daftar pasar sistem (bukan seluruh bursa).' : '';
+  return '<div class="gwarn">' + esc(t + tot) + '</div>' + (subG === 'swing' || subG === 'harian' ? renderRaporGainer(G.rapor) : '');
+}
+function renderRaporGainer(r) {
+  if (!r) return '';
+  const f = x => x == null ? '-' : String(x).replace('.', ',');
+  if (subG === 'swing' && r.swing && r.swing.n) {
+    const s = r.swing, d = r.swingDasar;
+    return '<div class="gwarn" style="color:var(--ink2);background:var(--bg)"><b>Uji riwayat (' + esc(r.dari) + ' s/d ' + esc(r.sampai) + ')</b><br>' + s.n + ' kejadian: kena target ' + f(s.target) + '%, kena batas rugi ' + f(s.stop) + '%, belum keduanya dalam 10 hari ' + f(s.sisa) + '%. Pembanding semua saham likuid yang naik: target ' + f(d.target) + '%, rugi ' + f(d.stop) + '%. Hasil masa lalu tidak menjamin hasil ke depan.</div>';
+  }
+  if (subG === 'harian' && r.harian && r.harian.n) {
+    const s = r.harian, d = r.harianDasar;
+    return '<div class="gwarn" style="color:var(--ink2);background:var(--bg)"><b>Uji riwayat</b><br>' + s.n + ' kejadian: esok harinya ditutup di atas harga buka ' + f(s.naik) + '% (rata-rata ' + f(s.rata) + '%). Pembanding saham likuid naik 4% ke atas: ' + f(d.naik) + '% (rata-rata ' + f(d.rata) + '%). Hasil masa lalu tidak menjamin hasil ke depan.</div>';
+  }
+  return '';
+}
 function item(x) {
   const chg = x.chg || 0, cls = chg >= 0 ? 'up' : 'dn', bn = {a: '< 1.000', b: '1.000 - 5.000', c: '> 5.000'}[x.band] || '';
   let badge = '';
   if (tab === 'beli' || tab === 'naik') badge = '<span class="badge ' + esc(x.tingkat) + '">' + (x.tingkat === 'kuat' ? 'kuat' : tab === 'naik' ? 'pantau' : 'biasa') + '</span>';
   if (tab === 'jual' && x.tinggi) badge = '<span class="badge tinggi">risiko tinggi</span>';
+  if (tab === 'gain') badge = {swing: '<span class="badge kuat">swing</span>', harian: '<span class="badge pantau">kandidat besok</span>', hindari: '<span class="badge tinggi">hindari</span>'}[subG];
   let lv = '';
-  if (tab === 'beli') lv = '<div class="lv"><div class="m">Area masuk<b>' + rp(x.masuk) + '</b></div><div class="s">Batas rugi<b>' + rp(x.stop) + '</b></div><div class="t">Target awal<b>' + rp(x.target) + '</b></div></div>';
+  if (tab === 'beli' || (tab === 'gain' && x.masuk)) lv = '<div class="lv"><div class="m">Area masuk<b>' + rp(x.masuk) + '</b></div><div class="s">Batas rugi<b>' + rp(x.stop) + '</b></div><div class="t">Target awal<b>' + rp(x.target) + '</b></div></div>';
   const alasan = (x.rsi != null || x.mc) ? (x.alasan || []).filter(a => !/^(RSI|MACD)/.test(a)) : (x.alasan || []);
   const al = alasan.length ? '<ul class="al">' + alasan.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul>' : '';
   const cat = (x.catatan || []).length ? '<div class="cat">Catatan: ' + esc(x.catatan[0]) + '</div>' : '';
@@ -422,6 +461,7 @@ $('#fMasuk').addEventListener('submit', async ev => {
   b.disabled = false; b.textContent = t0;
 });
 $('#tabs').addEventListener('click', e => { const b = e.target.closest('.tab'); if (!b) return; tab = b.dataset.t; render(); });
+$('#subG').addEventListener('click', e => { const b = e.target.closest('.sb'); if (!b) return; subG = b.dataset.s; render(); });
 $('#bands').addEventListener('click', e => { const b = e.target.closest('.bd'); if (!b) return; band = b.dataset.b; render(); });
 $('#durs').addEventListener('click', e => { const b = e.target.closest('.dur'); if (!b) return; durasi = Number(b.dataset.h); document.querySelectorAll('.dur').forEach(x => x.classList.toggle('on', x === b)); });
 $('#bDemoBuka').onclick = () => { $('#fDemo').hidden = !$('#fDemo').hidden; };
@@ -594,7 +634,7 @@ function tabInfoRender(r, arr) {
   const t = {beli: 'Lolos aturan paling ketat dan punya rencana stop dan target. Ini acuan, bukan perintah beli.', naik: 'Tren naik terbentuk, tetapi belum memenuhi semua syarat beli. Cukup dipantau.', jual: 'Ada tanda melemah atau turun tajam. Bila Anda memegangnya, saatnya evaluasi.'}[tab];
   let x = t;
   if (tab === 'beli' && !arr.length && r.pasar && r.pasar.level === 'lemah') x += ' Pasar sedang lemah: syarat beli dinaikkan 15 poin, jadi daftar kosong itu wajar. Menunggu juga keputusan.';
-  $('#tabInfo').textContent = x;
+  $('#tabInfo').textContent = tab === 'gain' ? '' : x;
 }
 $('#bSandi').onclick = () => { const c = $('#sandiCard'); c.hidden = !c.hidden; if (!c.hidden) { c.scrollIntoView({behavior: 'smooth', block: 'center'}); $('#sLama').focus(); } };
 $('#fSandi').addEventListener('submit', async ev => {
@@ -644,7 +684,7 @@ function kalHitung() {
 $('#kKecil').addEventListener('change', kalHitung);
 try { const k = JSON.parse(localStorage.getItem(KAL) || 'null'); if (k) { if (k.m) $('#kModal').value = k.m; if (k.r) $('#kRisk').value = k.r; } } catch (e) {}
 function tambahTombolHitung(arr) {
-  if (tab !== 'beli') return;
+  if (tab !== 'beli' && !(tab === 'gain' && subG !== 'hindari')) return;
   document.querySelectorAll('#daftar .item').forEach(it => {
     if (it.querySelector('.btnhit')) return;
     const b = document.createElement('button'); b.type = 'button'; b.className = 'btnhit'; b.dataset.k = it.dataset.k; b.textContent = 'Hitung lot untuk ' + it.dataset.k;
@@ -653,7 +693,8 @@ function tambahTombolHitung(arr) {
 }
 document.addEventListener('click', ev => {
   const b = ev.target.closest('.btnhit'); if (!b || !data) return;
-  const x = (data.ringkasan.beli || []).find(y => y.k === b.dataset.k); if (!x) return;
+  const sumber = tab === 'gain' ? ((data.ringkasan.gainer || {})[subG] || []) : (data.ringkasan.beli || []);
+  const x = sumber.find(y => y.k === b.dataset.k); if (!x) return;
   $('#kMasuk').value = Math.round(x.masuk); $('#kStop').value = Math.round(x.stop);
   const pasar = data.ringkasan.pasar; $('#kKecil').checked = !!(pasar && pasar.level === 'lemah');
   kalHitung(); $('#kal').scrollIntoView({behavior: 'smooth', block: 'start'});
