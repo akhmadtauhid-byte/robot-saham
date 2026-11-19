@@ -301,6 +301,7 @@ tr.sel{background:var(--bg)}
   <div class="card" id="wlCard" hidden>
     <h3>Rekomendasi hari ini (urut skor tertinggi)</h3>
     <div id="ringkas" style="margin-bottom:8px"></div>
+    <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="gtOn" checked> Gerbang kualitas sinyal: tahan sinyal beli bila backtest lemah, pasar lemah + backtest ragu, atau skor turun tajam (15 poin atau lebih)</label>
     <div class="tblwrap"><table id="wl"></table></div>
   </div>
 
@@ -677,6 +678,19 @@ function badgeBT(q, tampilAlasan){
   return `<span class="badge ${cls}" title="${esc(q.why)}"><i>${ic}</i>${q.t}</span>` + (tampilAlasan ? `<br><span class="note">${esc(q.why)}</span>` : '');
 }
 
+/* gerbang kualitas sinyal: menahan sinyal beli bila backtest lemah, pasar lemah + backtest ragu, atau skor turun tajam. Pedoman, bukan jaminan. */
+const GATE = {on: true, drop: 15};
+try { const g = localStorage.getItem('rs_gate'); if (g != null) GATE.on = g === '1'; } catch (e) {}
+function gerbang(st, K){
+  if (!GATE.on) return {tahan: false, alasan: []};
+  if (K === undefined) K = kondisiPasar();
+  const al = [], q = kualitasBT(backtest(st.d, st.I, S.cfg)), pb = perubahan(st);
+  if (q.lvl === 'lemah') al.push(q.t + ': ' + q.why);
+  else if (K && K.level === 'lemah' && q.lvl === 'ragu') al.push('pasar lemah dan ' + q.t);
+  if (pb.dS != null && pb.dS <= -GATE.drop) al.push('skor turun ' + Math.abs(pb.dS).toFixed(0) + ' poin dari hari sebelumnya (sinyal melemah)');
+  return {tahan: al.length > 0, alasan: al};
+}
+
 /* ===================== data contoh ===================== */
 function rng(seed){ return () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296; }
 function synth(seed, p0, drift, vol, n = 320){
@@ -806,8 +820,6 @@ async function api(aksi, body){
   catch (e) { throw new Error('Respons bukan data. Pastikan Web App di-deploy dengan akses "Anyone" dan URL berakhiran /exec.'); }
   if (!j.ok) {
     if (j.sesi === false && SES.token) keluarLokal('Sesi berakhir. Silakan masuk lagi.');
-    if (j.kedaluwarsa && SES.token) keluarLokal(j.error);
-    if (j.terbatas && SES.token) { location.replace('ringkasan.html'); }
     const er = new Error(j.error || 'Permintaan gagal.'); er.data = j; throw er;
   }
   return j;
@@ -1246,68 +1258,19 @@ function renderAdmin(j){
   const me = SES.user ? SES.user.email : '';
   const rows = j.pengguna.map(u => {
     const self = u.email === me;
-    return `<tr><td>${esc(u.nama)}</td><td>${esc(u.email)}</td><td>${u.peran === 'admin' ? (u.super ? 'super admin' : 'admin') : 'pengguna'}</td><td class="num">${u.saham}</td><td>${esc(u.login)}</td>
-      <td>${u.peran === 'admin' ? '-' : esc(u.paket === 'ringkasan' ? 'Ringkasan' : 'Penuh') + '<br><span class="note">' + (u.berakhir ? (u.sisa < 0 ? '<span class="neg">habis ' + esc(u.berakhir) + '</span>' : 's.d. ' + esc(u.berakhir) + ' (' + u.sisa + ' hari)') : 'tanpa batas') + '</span>'}</td>
+    return `<tr><td>${esc(u.nama)}</td><td>${esc(u.email)}</td><td>${u.peran === 'admin' ? 'admin' : 'pengguna'}</td><td class="num">${u.saham}</td><td>${esc(u.login)}</td>
       <td>${u.aktif ? '<span class="pos">aktif</span>' : '<span class="neg">nonaktif</span>'}</td>
       <td style="white-space:nowrap"><button class="seg" data-ad="aktif" data-id="${esc(u.id)}" data-on="${u.aktif ? 0 : 1}" ${self ? 'disabled' : ''}>${u.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
       <button class="seg" data-ad="reset" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Reset sandi</button>
-      ${j.saya && j.saya.super && u.peran !== 'admin' ? `<button class="seg" data-ad="jadiAdmin" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Jadikan admin</button>` : ''}${j.saya && j.saya.super && u.peran === 'admin' && !u.super ? `<button class="seg" data-ad="cabutAdmin" data-id="${esc(u.id)}" data-em="${esc(u.email)}">Cabut admin</button>` : ''}
-      <button class="seg" data-ad="pilih" data-id="${esc(u.id)}" data-em="${esc(u.email)}" ${u.peran === 'admin' ? 'disabled' : ''}>Atur paket</button>
       <button class="seg danger" data-ad="hapus" data-id="${esc(u.id)}" ${self ? 'disabled' : ''}>Hapus</button></td></tr>`;
   }).join('');
   $('#adminBody').innerHTML = `
     <p style="margin:0 0 8px">Kode undangan: ${j.undangan ? `<span class="code">${esc(j.undangan)}</span>` : '<b>(pendaftaran ditutup)</b>'}
       <button class="seg" data-ad="undBaru">Buat kode baru</button>${j.undangan ? ' <button class="seg" data-ad="undTutup">Tutup pendaftaran</button>' : ''}</p>
     <p class="note" style="margin-top:0">Pengguna ${j.pengguna.length}/${j.maksPengguna} · saham unik di sistem: ${j.kodeUnik}. Bagikan kode hanya ke orang yang Anda izinkan mendaftar.</p>
-    <div class="tblwrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th class="num">Saham</th><th>Login terakhir</th><th>Paket / masa aktif</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${(j.demo || []).length ? `<div class="card" style="margin-top:12px;padding:10px;border-color:var(--warn,#d97706)"><b>Permintaan demo 1 hari (${j.demo.length})</b>
-      <p class="note" style="margin:4px 0">Setujui untuk membuat akun Ringkasan 1 hari. Kata sandi sementara tampil sekali, lalu kirim lewat WhatsApp.</p>
-      ${j.demo.map(q => `<div class="row" style="align-items:center;margin-top:6px"><span>${esc(q.nama)} · ${esc(q.email)} · WA ${esc(q.wa)} <span class="note">${esc(q.waktu)}</span></span>
-        <button class="seg" data-ad="demoSetuju" data-id="${esc(q.id)}">Setujui</button><button class="seg danger" data-ad="demoTolak" data-id="${esc(q.id)}">Tolak</button></div>`).join('')}</div>` : ''}
-    ${(j.permintaan || []).length ? `<div class="card" style="margin-top:12px;padding:10px;border-color:var(--warn,#d97706)"><b>Permintaan perpanjangan (${j.permintaan.length})</b>
-      <p class="note" style="margin:4px 0">Setujui hanya setelah pembayaran dikonfirmasi. Masa aktif bertambah dari tanggal berakhir (atau dari hari ini bila sudah habis).</p>
-      ${j.permintaan.map(q => `<div class="row" style="align-items:center;margin-top:6px"><span>${esc(q.nama)} · ${esc(q.email)} · <b>${q.hari} hari</b> <span class="note">${esc(q.waktu)}</span></span>
-        <button class="seg" data-ad="reqSetuju" data-id="${esc(q.id)}">Setujui</button><button class="seg danger" data-ad="reqTolak" data-id="${esc(q.id)}">Tolak</button></div>`).join('')}</div>` : ''}
-    <div class="card" style="margin-top:12px;padding:10px">
-      <b>Atur paket &amp; masa aktif</b>
-      <p class="note" id="pkTarget" style="margin:4px 0">Pilih pengguna dengan tombol "Atur paket" di tabel.</p>
-      <div class="row">
-        <select id="pkLevel"><option value="ringkasan">Ringkasan saja</option><option value="penuh">Penuh</option></select>
-        <select id="pkHari"><option value="1">Demo 1 hari (sampai akhir hari ini)</option><option value="3">3 hari</option><option value="7">7 hari</option><option value="30">1 bulan (30 hari)</option><option value="0">Tanpa batas</option></select>
-        <select id="pkMode"><option value="ganti">Mulai dari hari ini</option><option value="tambah">Perpanjang dari tanggal berakhir</option></select>
-        <button class="seg" data-ad="terapkan">Terapkan</button>
-      </div>
-    </div>
-    ${j.saya && j.saya.super && j.harga ? `<div class="card" style="margin-top:12px;padding:10px">
-      <b>Harga &amp; pembayaran</b>
-      <p class="note" style="margin:4px 0">Tampil di halaman ringkasan (login dan perpanjangan). Hanya super admin yang dapat mengubah.</p>
-      <div class="row">
-        <input id="hg3" type="tel" inputmode="numeric" placeholder="Harga 3 hari" value="${esc(j.harga.h3)}"><input id="hg7" type="tel" inputmode="numeric" placeholder="Harga 7 hari" value="${esc(j.harga.h7)}"><input id="hg30" type="tel" inputmode="numeric" placeholder="Harga 30 hari" value="${esc(j.harga.h30)}">
-      </div>
-      ${[0, 1, 2, 3].map(i => { const r = j.harga.rek[i] || {n: '', v: ''}; return `<div class="row"><input class="hgN" type="text" maxlength="30" placeholder="Nama (mis. BCA / DANA)" value="${esc(r.n)}"><input class="hgV" type="text" maxlength="40" placeholder="Nomor rekening / e-wallet" value="${esc(r.v)}"></div>`; }).join('')}
-      <div class="row"><button class="seg" data-ad="hargaSimpan">Simpan harga</button></div>
-    </div>` : ''}
-    <div class="card" style="margin-top:12px;padding:10px">
-      <b>Buat akun langsung</b>
-      <p class="note" style="margin:4px 0">Tanpa kode undangan. Kata sandi sementara tampil sekali di bawah; sampaikan ke yang bersangkutan.</p>
-      <div class="row">
-        <input id="nbNama" type="text" placeholder="Nama" autocomplete="off"><input id="nbEmail" type="email" placeholder="Email" autocomplete="off"><input id="nbWa" type="tel" placeholder="WhatsApp (opsional)" autocomplete="off">
-        <select id="nbLevel"><option value="ringkasan">Ringkasan saja</option><option value="penuh">Penuh</option></select>
-        <select id="nbHari"><option value="1" selected>Demo 1 hari (sampai akhir hari ini)</option><option value="3">3 hari</option><option value="7">7 hari</option><option value="30">1 bulan (30 hari)</option><option value="0">Tanpa batas</option></select>
-        <button class="seg" data-ad="buatAkun">Buat akun</button>
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px"><button class="seg" data-ad="segarSemua">Perbarui data pasar semua saham</button><button class="seg" data-ad="muat">Muat ulang daftar</button><button class="seg" data-ad="ringBangun">Bangun ulang ringkasan</button></div>
+    <div class="tblwrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th class="num">Saham</th><th>Login terakhir</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="row" style="margin-top:10px"><button class="seg" data-ad="segarSemua">Perbarui data pasar semua saham</button><button class="seg" data-ad="muat">Muat ulang daftar</button></div>
     <div class="note" id="adStat" style="margin-top:6px"></div>`;
-}
-let adTarget = null;
-// Tautan WhatsApp berisi akun + kata sandi sementara. Bila nomor pengguna tersimpan, langsung ke nomor itu; bila tidak, WhatsApp membuka pilihan kontak.
-function tautAkunWA(j, jenis) {
-  const url = new URL('ringkasan.html', location.href).href;
-  const buka = jenis === 'reset' ? 'kata sandi akun Robot Analisa Saham IDX Anda sudah diatur ulang.' : 'akun Robot Analisa Saham IDX Anda sudah aktif.';
-  const masa = jenis === 'demo' ? '\nBerlaku sampai akhir hari ini (' + j.berakhir + ').' : (j.berakhir ? '\nBerlaku sampai ' + j.berakhir + '.' : '');
-  const teks = 'Halo ' + (j.nama || '') + ', ' + buka + '\nAlamat: ' + url + '\nEmail: ' + j.email + '\nKata sandi sementara: ' + j.sandiSementara + masa + '\nKetik persis seperti di atas. Setelah masuk, silakan ganti kata sandi.';
-  return '<a href="https://wa.me/' + (j.wa ? esc(j.wa) : '') + '?text=' + encodeURIComponent(teks) + '" target="_blank" rel="noopener">' + (j.wa ? 'Kirim ke WhatsApp ' + esc(j.nama || '') : 'Kirim via WhatsApp (pilih kontak)') + '</a>';
 }
 $('#adminBody').addEventListener('click', async e => {
   const b = e.target.closest('button[data-ad]'); if (!b || b.disabled) return;
@@ -1315,44 +1278,12 @@ $('#adminBody').addEventListener('click', async e => {
   const pesan = t => { if (st()) st().textContent = t; };
   try {
     if (a === 'muat') return muatAdmin();
-    if (a === 'demoSetuju' || a === 'demoTolak') {
-      const j = await api(a === 'demoSetuju' ? 'demoSetuju' : 'demoTolak', {id: b.dataset.id});
-      await muatAdmin(); const s2 = $('#adStat'); if (!s2) return;
-      if (a === 'demoTolak') { s2.textContent = 'Permintaan demo ditolak.'; return; }
-      s2.innerHTML = 'Akun demo dibuat untuk ' + esc(j.email) + ' · kata sandi sementara: <b>' + esc(j.sandiSementara) + '</b> · ' + tautAkunWA(j, 'demo');
-      return;
-    }
-    if (a === 'reqSetuju' || a === 'reqTolak') {
-      const j = await api(a === 'reqSetuju' ? 'permintaanSetuju' : 'permintaanTolak', {id: b.dataset.id});
-      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = a === 'reqSetuju' ? 'Perpanjangan disetujui, berlaku sampai ' + j.berakhir + '.' : 'Permintaan ditolak.'; return;
-    }
-    if (a === 'pilih') { adTarget = {id: b.dataset.id, em: b.dataset.em}; $('#pkTarget').textContent = 'Pengguna terpilih: ' + b.dataset.em; return; }
-    if (a === 'terapkan') {
-      if (!adTarget) return pesan('Pilih pengguna dulu dengan tombol "Atur paket".');
-      const j = await api('setPaket', {id: adTarget.id, level: $('#pkLevel').value, hari: Number($('#pkHari').value), mode: $('#pkMode').value});
-      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.textContent = 'Paket ' + adTarget.em + ' diubah: ' + j.paket + (j.berakhir ? ', berlaku sampai ' + j.berakhir : ', tanpa batas') + '.'; return;
-    }
-    if (a === 'buatAkun') {
-      const j = await api('buatAkun', {nama: $('#nbNama').value, email: $('#nbEmail').value, level: $('#nbLevel').value, hari: Number($('#nbHari').value), wa: $('#nbWa').value});
-      await muatAdmin(); const s2 = $('#adStat'); if (s2) s2.innerHTML = 'Akun dibuat: ' + esc(j.email) + ' · kata sandi sementara: <b>' + esc(j.sandiSementara) + '</b>' + (j.berakhir ? ' · berlaku sampai ' + esc(j.berakhir) : ' · tanpa batas') + ' · ' + tautAkunWA(j, 'baru'); return;
-    }
-    if (a === 'hargaSimpan') {
-      const rek = [...document.querySelectorAll('.hgN')].map((el, i) => ({n: el.value, v: document.querySelectorAll('.hgV')[i].value}));
-      await api('hargaSimpan', {h3: $('#hg3').value, h7: $('#hg7').value, h30: $('#hg30').value, rek});
-      pesan('Harga & pembayaran disimpan. Halaman ringkasan memakai nilai baru saat dimuat ulang.'); return;
-    }
-    if (a === 'ringBangun') { const j = await api('ringkasanBangun'); pesan('Ringkasan diperbarui: ' + j.beli + ' potensi beli, ' + j.naik + ' potensi naik, ' + j.jual + ' potensi jual.'); return; }
-    if (a === 'jadiAdmin' || a === 'cabutAdmin') {
-      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; const t0 = b.textContent; b.textContent = 'Yakin?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = t0; }, 4000); return; }
-      await api(a === 'jadiAdmin' ? 'jadikanAdmin' : 'cabutAdmin', {id: b.dataset.id}); await muatAdmin();
-      const s2 = $('#adStat'); if (s2) s2.textContent = (a === 'jadiAdmin' ? 'Dijadikan admin: ' : 'Admin dicabut: ') + b.dataset.em + '. Ia perlu keluar lalu masuk lagi agar perubahan berlaku.'; return;
-    }
     if (a === 'hapus' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Yakin hapus?'; setTimeout(() => { b.dataset.sure = ''; b.textContent = 'Hapus'; }, 4000); return; }
     if (a === 'undBaru') { await api('undanganBaru'); return muatAdmin(); }
     if (a === 'undTutup') { await api('undanganTutup'); return muatAdmin(); }
     if (a === 'aktif') { await api('setAktif', {id: b.dataset.id, aktif: b.dataset.on === '1'}); return muatAdmin(); }
     if (a === 'hapus') { await api('hapusPengguna', {id: b.dataset.id}); return muatAdmin(); }
-    if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); const s2 = $('#adStat'); if (s2) { s2.innerHTML = 'Kata sandi sementara untuk ' + esc(j.email) + ': <b>' + esc(j.sandiSementara) + '</b> · ' + tautAkunWA(j, 'reset'); s2.scrollIntoView({block: 'center'}); } else pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara); return; }
+    if (a === 'reset') { const j = await api('resetSandi', {id: b.dataset.id}); pesan('Kata sandi sementara untuk ' + b.dataset.em + ': ' + j.sandiSementara + ' (sampaikan ke yang bersangkutan; minta segera diganti).'); return; }
     if (a === 'segarSemua') { pesan('Memperbarui data pasar... bisa beberapa menit.'); const j = await api('segarkanSemua'); const g0 = j.segar; pesan(g0.ok.length + g0.gagal.length + g0.sisa === 0 ? 'Semua data sudah baru, tidak ada yang perlu diperbarui.' : 'Selesai: ' + g0.ok.length + ' berhasil, ' + g0.gagal.length + ' gagal, ' + g0.sisa + ' belum sempat (tekan lagi).'); if (g0.ok.length) { muatUlangWatchlist(); PASAR.busy = false; muatPasar(); } }
   } catch (err) { pesan(err.message); }
 });
@@ -1386,8 +1317,10 @@ function renderWatch(){
   const rows = Object.values(S.stocks).map(st => ({st, sc: lastScore(st)})).filter(x => x.sc).sort((a, b) => b.sc.total - a.sc.total);
   const rk = $('#ringkas');
   const nm = a => a.map(x => esc(x.st.name) + ' (' + (x.sc.total >= 0 ? '+' : '') + x.sc.total.toFixed(0) + ')').join(', ');
-  const beli = rows.filter(x => x.sc.total >= S.cfg.entryTh), hindari = rows.filter(x => x.sc.total <= -25), tunggu = rows.filter(x => x.sc.total < S.cfg.entryTh && x.sc.total > -25);
+  const KG = kondisiPasar(), gt = {}; rows.forEach(x => { gt[x.st.name] = gerbang(x.st, KG); });
+  const sinyalB = rows.filter(x => x.sc.total >= S.cfg.entryTh), beli = sinyalB.filter(x => !gt[x.st.name].tahan), ditahan = sinyalB.filter(x => gt[x.st.name].tahan), hindari = rows.filter(x => x.sc.total <= -25), tunggu = rows.filter(x => x.sc.total < S.cfg.entryTh && x.sc.total > -25);
   rk.innerHTML = '<div><b class="pos">Kandidat beli:</b> ' + (beli.length ? nm(beli) : 'tidak ada yang memenuhi syarat beli hari ini') + '</div>'
+    + (ditahan.length ? '<div><b style="color:var(--warn)">Sinyal beli ditahan gerbang kualitas:</b> ' + ditahan.map(x => esc(x.st.name) + ' (' + (x.sc.total >= 0 ? '+' : '') + x.sc.total.toFixed(0) + ': ' + esc(gt[x.st.name].alasan.join('; ')) + ')').join('<br>') + '</div>' : '')
     + (tunggu.length ? '<div><b style="color:var(--warn)">Tunggu:</b> ' + nm(tunggu) + '</div>' : '')
     + (hindari.length ? '<div><b class="neg">Hindari / kurangi:</b> ' + nm(hindari) + '</div>' : '');
   let h = '<thead><tr><th>Saham</th><th class="num">Harga</th><th class="num">Hari ini</th><th>Skor</th><th class="num"></th><th class="num" title="Perubahan skor dibanding hari bursa sebelumnya">Δ skor</th><th>Sinyal</th><th class="num">RSI</th><th class="num">Backtest</th><th class="num">Buy&amp;Hold</th><th></th></tr></thead><tbody>';
@@ -1399,7 +1332,7 @@ function renderWatch(){
       <td>${meterHTML(sc.total)}</td>
       <td class="num">${sc.total >= 0 ? '+' : ''}${sc.total.toFixed(0)}</td>
       <td class="num">${deltaSkorHTML(pb.dS)}</td>
-      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span>${pb.bounce ? ' <span class="badge warn" title="Harga memantul naik tetapi masih di bawah SMA50 dan skor negatif"><i>↻</i>pantulan</span>' : ''}${v.cls === 'good' ? ' ' + badgeBT(kualitasBT(bt)) : ''}</td>
+      <td><span class="badge ${v.cls}"><i>${v.ic}</i>${v.t}</span>${pb.bounce ? ' <span class="badge warn" title="Harga memantul naik tetapi masih di bawah SMA50 dan skor negatif"><i>↻</i>pantulan</span>' : ''}${v.cls === 'good' ? ' ' + badgeBT(kualitasBT(bt)) : ''}${v.cls === 'good' && gt[st.name].tahan ? ' <span class="badge bad" title="' + esc(gt[st.name].alasan.join('; ')) + '"><i>⏸</i>DITAHAN</span>' : ''}</td>
       <td class="num">${st.I.rsi[n] != null ? st.I.rsi[n].toFixed(0) : '–'}</td>
       <td class="num ${bt.total >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.total)}</td>
       <td class="num ${bt.bh >= 0 ? 'pos' : 'neg'}">${fmtPct(bt.bh)}</td>
@@ -1441,6 +1374,7 @@ function renderDetail(){
   if (n < 120) warns.push('Data pendek, hasil backtest kurang bermakna.');
   if (lastDate && !st.name.startsWith('DEMO') && (Date.now() - lastDate.getTime()) / 864e5 > 7) warns.push('Data terakhir bertanggal ' + fmtD(lastDate) + ' (lebih dari 7 hari lalu); perbarui sebelum mengambil keputusan.');
   if (st.name.startsWith('DEMO')) warns.push('Ini data sintetis untuk mencoba alat, bukan harga pasar sebenarnya.');
+  if (v.cls === 'good') { const g = gerbang(st); if (g.tahan) warns.unshift('Gerbang kualitas MENAHAN sinyal ini: ' + g.alasan.join('; ') + '. Robot tidak memasukkannya ke daftar kandidat beli.'); }
   if (v.cls === 'good') { const q = kualitasBT(bt); if (q.lvl !== 'cukup') warns.push('Sinyal beli, tetapi ' + q.t + ': ' + q.why + '. Perlakukan sinyal ini sebagai bahan pertimbangan, bukan alasan untuk membeli.'); }
 
   const compRows = sc.comps.map(c => `<tr><td>${esc(c.name)}</td><td class="num">${c.w}</td><td>${meterHTML(c.v * 100)}</td><td class="num ${c.v >= 0 ? 'pos' : 'neg'}">${c.v >= 0 ? '+' : ''}${(c.v * c.w).toFixed(1).replace('.', ',')}</td><td class="why">${esc(c.why)}</td></tr>`).join('');
@@ -2022,7 +1956,7 @@ function sinyalBeli(){
     if (out[st.name] || (S.pos && posValid(S.pos[st.name]))) return;
     const sc = lastScore(st), pe = peluang(st), pl = plan(st.d, st.I, S.cfg);
     if (!sc || !pe || !pl) return;
-    if (sc.total >= th && pe.avgVal >= 1e9 && pe.rs <= 75 && pl.lots >= 1) out[st.name] = {k: st.name, skor: sc.total, lots: pl.lots, cost: pl.cost, harga: pe.price, dari};
+    if (sc.total >= th && pe.avgVal >= 1e9 && pe.rs <= 75 && pl.lots >= 1 && !gerbang(st, K).tahan) out[st.name] = {k: st.name, skor: sc.total, lots: pl.lots, cost: pl.cost, harga: pe.price, dari};
   };
   Object.values(S.stocks).forEach(st => tambah(st, 'watchlist'));
   PASAR.st.forEach(st => tambah(st, 'pasar'));
@@ -2035,7 +1969,9 @@ function sinyalPosisi(){
     const L = LIVE.data[k], o = S.stocks[k], pos = S.pos && S.pos[k];
     if (!L || !o || !posValid(pos)) return;
     const s = statusPos(L.price, posLevels(o, pos));
-    if (s.code === 'stop' || s.code === 'target') out.push({k, code: s.code, harga: L.price});
+    if (s.code === 'stop' || s.code === 'target') { out.push({k, code: s.code, harga: L.price}); return; }
+    const pb = perubahan(o);
+    if (GATE.on && pb.dS != null && pb.dS <= -GATE.drop) out.push({k, code: 'lemah', harga: L.price, dS: pb.dS});
   });
   return out;
 }
@@ -2070,7 +2006,7 @@ function perbaruiSinyal(){
   if (!baru.length || !SINYAL.bunyi) alarmStop();
   const adaStop = pos.some(x => x.code === 'stop');
   let h = '';
-  pos.forEach(x => { h += `<span class="sg-item ${x.code === 'stop' ? 'neg' : 'pos'}"><b>${x.code === 'stop' ? '⛔' : '🎯'} ${esc(x.k)}</b> ${x.code === 'stop' ? 'menyentuh stop' : 'mencapai target'} (${fmtP(x.harga)})</span>`; });
+  pos.forEach(x => { h += x.code === 'lemah' ? `<span class="sg-item" style="color:var(--warn)"><b>⚠ ${esc(x.k)}</b> sinyal melemah (skor turun ${Math.abs(x.dS).toFixed(0)} poin); cek stop dan rencana</span>` : `<span class="sg-item ${x.code === 'stop' ? 'neg' : 'pos'}"><b>${x.code === 'stop' ? '⛔' : '🎯'} ${esc(x.k)}</b> ${x.code === 'stop' ? 'menyentuh stop' : 'mencapai target'} (${fmtP(x.harga)})</span>`; });
   if (beli.length) h += '<span class="sg-item"><b>🔔 Sinyal beli:</b> ' + beli.slice(0, 6).map(x => `<a data-sg="${esc(x.k)}"><b>${esc(x.k)}</b></a> (skor ${x.skor >= 0 ? '+' : ''}${x.skor.toFixed(0)}, ${x.lots} lot${x.dari === 'watchlist' ? ', watchlist' : ''})`).join(', ') + (beli.length > 6 ? ' +' + (beli.length - 6) + ' lainnya' : '') + '</span>';
   const K = kondisiPasar();
   if (beli.length && K && K.level === 'lemah') h += '<span class="sg-item" style="color:var(--warn)">⚠ Pasar sedang lemah</span>';
@@ -2316,7 +2252,7 @@ function hitungKB(){
     out.push({st, sc, pe, pl, likuid, terjangkau: pl.byCash >= 1, bisa: pl.lots >= 1, rugi1,
       modalButuh: Math.max(pl.e * 100, rugi1 / rp), v: verdict(sc.total),
       ret20: nn >= 20 ? cc[nn] / cc[nn - 20] - 1 : null, ret60: nn >= 60 ? cc[nn] / cc[nn - 60] - 1 : null,
-      gab: 0.6 * (sc.total + 100) / 2 + 0.4 * pe.pt, lolos: sc.total >= th && likuid && pe.rs <= 75});
+      gab: 0.6 * (sc.total + 100) / 2 + 0.4 * pe.pt, lolos: sc.total >= th && likuid && pe.rs <= 75 && !gerbang(st, K).tahan});
   });
   rankPotensi(out);
   return out;
@@ -2434,6 +2370,8 @@ function renderKB(){
   const b = document.getElementById('kbMuat'), c = document.getElementById('kbTerj');
   if (b) b.onclick = () => muatPasar();
   if (c) c.onchange = () => { KB.terjangkau = c.checked; renderKB(); };
+  const gt = document.getElementById('gtOn');
+  if (gt) { gt.checked = GATE.on; gt.onchange = () => { GATE.on = gt.checked; try { localStorage.setItem('rs_gate', GATE.on ? '1' : '0'); } catch (e) {} try { renderWatch(); } catch (e) {} try { renderKB(); } catch (e) {} try { perbaruiSinyal(); } catch (e) {} }; }
   const pz = document.getElementById('kbPasar');
   if (pz) pz.onchange = () => { KB.pasar = pz.checked; renderKB(); };
 })();
